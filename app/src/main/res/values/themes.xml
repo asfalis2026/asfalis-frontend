@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.WomenSafetyApp"
+        parent="Theme.MaterialComponents.DayNight.NoActionBar">
+
+        <!-- 🔥 THIS IS THE KEY LINE -->
+        <item name="android:windowBackground">@drawable/splash_window_bg</item>
+
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
+
+</resources>
