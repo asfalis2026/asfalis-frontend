@@ -2,19 +2,17 @@ package com.yourname.womensafety.ui.screens
 
 import android.app.Activity
 import android.content.Context
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,6 +23,8 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -34,173 +34,211 @@ fun LoginScreen(navController: NavController) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
 
-    // --- SYSTEM BACK FIX ---
-    // This prevents the "Black Screen". Instead of navigating back to the Splash,
-    // it tells the Android Activity to finish/close.
-    BackHandler {
-        (context as? Activity)?.finish()
-    }
+    // Toggle between "Login" and "Register" view
+    var isLoginMode by remember { mutableStateOf(true) }
+
+    // Form states
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var fullName by remember { mutableStateOf("") }
+    var country by remember { mutableStateOf("") }
+
+    // Prevent going back to Splash; close app instead
+    BackHandler { (context as? Activity)?.finish() }
 
     val backgroundGradient = Brush.verticalGradient(
-        colors = listOf(
-            Color.Black,
-            Color(0xFF1A0000),
-            Color(0xFF330000)
-        )
+        colors = listOf(Color.Black, Color(0xFF1A0000), Color(0xFF330000))
     )
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(backgroundGradient)
-    ) {
-        // --- TOP BAR / EXIT BUTTON ---
-        IconButton(
-            onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                // Also close the app here if they click the back arrow on login
-                (context as? Activity)?.finish()
-            },
-            modifier = Modifier
-                .statusBarsPadding()
-                .padding(16.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(0.08f))
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Exit App",
-                tint = Color.White
-            )
-        }
-
+    Box(modifier = Modifier.fillMaxSize().background(backgroundGradient)) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
                 .padding(horizontal = 30.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Spacer(Modifier.height(40.dp))
+
             // --- LOGO SECTION ---
             Box(
                 modifier = Modifier
-                    .size(140.dp)
+                    .size(100.dp)
                     .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            listOf(Color(0xFFE10600), Color(0xFF8B0000))
-                        )
-                    ),
+                    .background(Color(0xFFE10600).copy(0.1f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Shield,
                     contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(70.dp)
+                    tint = Color(0xFFE10600),
+                    modifier = Modifier.size(50.dp)
                 )
             }
 
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(24.dp))
 
             Text(
-                "Welcome to Raksha",
+                text = if (isLoginMode) "Welcome back" else "Create Account",
                 color = Color.White,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                "Your safety companion",
+                text = if (isLoginMode) "Sign in to continue" else "Join our safety network",
                 color = Color.Gray,
                 fontSize = 16.sp
             )
 
-            Spacer(Modifier.height(50.dp))
-
-            // --- AUTHENTICATION OPTIONS ---
-            LoginOptionRow(
-                icon = Icons.Default.Email,
-                label = "Continue with Email",
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    navController.navigate("sign_in_email")
-                }
-            )
-
-            Spacer(Modifier.height(16.dp))
-
-            LoginOptionRow(
-                icon = Icons.Default.Phone,
-                label = "Continue with Phone",
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    navController.navigate("sign_in_phone")
-                }
-            )
-
-            Spacer(Modifier.height(16.dp))
-
-            // Google Login Placeholder
-            LoginOptionRow(
-                icon = Icons.Default.Email,
-                label = "Continue with Google",
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-
-                    // Update SharedPrefs so Splash knows we are logged in
-                    val sharedPref = context.getSharedPreferences("raksha_prefs", Context.MODE_PRIVATE)
-                    sharedPref.edit().putBoolean("is_logged_in", true).apply()
-
-                    // Navigate to dashboard and clear the login screen from history
-                    navController.navigate("dashboard") {
-                        popUpTo("login") { inclusive = true }
-                    }
-                }
-            )
-
             Spacer(Modifier.height(40.dp))
 
-            // --- FOOTER ---
-            Row {
-                Text("By continuing, you agree to our ", color = Color.Gray, fontSize = 12.sp)
-                Text(
-                    "Privacy Policy",
-                    color = Color.Red,
-                    fontSize = 12.sp,
-                    modifier = Modifier.clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        navController.navigate("privacy_policy")
-                    }
+            // --- DYNAMIC FORM ---
+            if (!isLoginMode) {
+                AuthTextField(
+                    value = fullName,
+                    onValueChange = { fullName = it },
+                    label = "Full Name",
+                    icon = Icons.Default.Person
                 )
+                Spacer(Modifier.height(16.dp))
+                AuthTextField(
+                    value = country,
+                    onValueChange = { country = it },
+                    label = "Country",
+                    icon = Icons.Default.Public
+                )
+                Spacer(Modifier.height(16.dp))
+            }
+
+            AuthTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = "Email Address",
+                icon = Icons.Default.Email
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            AuthTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = "Password",
+                icon = Icons.Default.Lock,
+                isPassword = true
+            )
+
+            if (isLoginMode) {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                    TextButton(onClick = { /* Implement Forgot Password */ }) {
+                        Text("Forgot Password?", color = Color(0xFFE10600), fontSize = 14.sp)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(30.dp))
+
+            // --- PRIMARY ACTION ---
+            Button(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+
+                    if (email.isNotEmpty() && password.isNotEmpty()) {
+                        val sharedPref = context.getSharedPreferences("raksha_prefs", Context.MODE_PRIVATE)
+
+                        if (isLoginMode) {
+                            // 1. RETURNING USER: Show Popup & Go to Dashboard
+                            val userName = email.substringBefore("@")
+                            Toast.makeText(context, "Welcome back, $userName!", Toast.LENGTH_SHORT).show()
+
+                            // Save Login State
+                            sharedPref.edit().putBoolean("is_logged_in", true).apply()
+
+                            navController.navigate("dashboard") {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        } else {
+                            // 2. NEW USER: Go to OTP verification
+                            navController.navigate("verify_otp/$email")
+                        }
+                    } else {
+                        Toast.makeText(context, "Please enter email and password", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE10600)),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text(
+                    text = if (isLoginMode) "Login" else "Get Verification Code",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            // --- TOGGLE MODE ---
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = if (isLoginMode) "New to ASFALIS?" else "Already have an account?",
+                    color = Color.Gray
+                )
+                TextButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    isLoginMode = !isLoginMode
+                }) {
+                    Text(
+                        text = if (isLoginMode) "Register" else "Login",
+                        color = Color(0xFFE10600),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun LoginOptionRow(icon: ImageVector, label: String, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
+fun AuthTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    icon: ImageVector,
+    isPassword: Boolean = false
+) {
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White.copy(0.05f),
-        shape = RoundedCornerShape(18.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(0.1f))
-    ) {
-        Row(
-            modifier = Modifier.padding(18.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFFE10600).copy(0.2f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, null, tint = Color(0xFFE10600), modifier = Modifier.size(20.dp))
+        label = { Text(label, color = Color.Gray) },
+        leadingIcon = { Icon(icon, null, tint = Color(0xFFE10600)) },
+        trailingIcon = {
+            if (isPassword) {
+                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Icon(
+                        imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                        contentDescription = null,
+                        tint = Color.Gray
+                    )
+                }
             }
-            Spacer(Modifier.width(20.dp))
-            Text(label, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-        }
-    }
+        },
+        visualTransformation = if (isPassword && !passwordVisible) PasswordVisualTransformation() else VisualTransformation.None,
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = Color.White,
+            unfocusedTextColor = Color.White,
+            focusedContainerColor = Color.White.copy(0.05f),
+            unfocusedContainerColor = Color.White.copy(0.05f),
+            focusedBorderColor = Color(0xFFE10600),
+            unfocusedBorderColor = Color.White.copy(0.1f),
+            cursorColor = Color(0xFFE10600)
+        ),
+        shape = RoundedCornerShape(14.dp),
+        singleLine = true
+    )
 }

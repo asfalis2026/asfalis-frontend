@@ -34,17 +34,6 @@ import androidx.navigation.NavController
 fun OnboardingScreen(navController: NavController) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
-
-    // --- AUTO-REDIRECT LOGIC ---
-    LaunchedEffect(Unit) {
-        val sharedPref = context.getSharedPreferences("raksha_prefs", Context.MODE_PRIVATE)
-        if (sharedPref.getBoolean("onboarding_complete", false)) {
-            navController.navigate("login") {
-                popUpTo("onboarding") { inclusive = true }
-            }
-        }
-    }
-
     val scale = animateFloatAsState(targetValue = 1f, label = "")
 
     Box(
@@ -57,6 +46,7 @@ fun OnboardingScreen(navController: NavController) {
             ),
         contentAlignment = Alignment.Center
     ) {
+        // Decorative radial glow
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -80,7 +70,7 @@ fun OnboardingScreen(navController: NavController) {
                 },
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            /* SHIELD ICON */
+            /* BRAND LOGO ICON */
             Box(
                 modifier = Modifier
                     .size(140.dp)
@@ -104,7 +94,7 @@ fun OnboardingScreen(navController: NavController) {
             Spacer(modifier = Modifier.height(32.dp))
 
             Text(
-                text = "Women Safety",
+                text = "ASFALIS",
                 color = Color.White,
                 fontSize = 34.sp,
                 fontWeight = FontWeight.Bold
@@ -120,54 +110,39 @@ fun OnboardingScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(40.dp))
 
+            // --- FEATURE LIST ---
             FeatureItem(
                 icon = Icons.Filled.Warning,
-                title = "Automatic SOS alert on unusual movement",
+                title = "Automatic SOS Alert",
                 subtitle = "Detects falls and impacts instantly"
             )
 
             FeatureItem(
                 icon = Icons.Filled.LocationOn,
-                title = "Real-time location sharing",
+                title = "Real-time Location Sharing",
                 subtitle = "Share your live location with trusted contacts"
             )
 
             FeatureItem(
                 icon = Icons.Outlined.Shield,
-                title = "24/7 protection monitoring",
+                title = "24/7 Protection Monitoring",
                 subtitle = "Background service always watching over you"
             )
 
             Spacer(modifier = Modifier.height(48.dp))
 
-            // --- BUTTON LOGIC ---
+            // --- PRIMARY BUTTON ---
             Button(
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
 
-                    val hasFineLocation = ContextCompat.checkSelfPermission(
-                        context, Manifest.permission.ACCESS_FINE_LOCATION
-                    ) == PackageManager.PERMISSION_GRANTED
+                    // 1. Mark onboarding as complete in SharedPreferences
+                    val sharedPref = context.getSharedPreferences("raksha_prefs", Context.MODE_PRIVATE)
+                    sharedPref.edit().putBoolean("onboarding_complete", true).apply()
 
-                    val hasSMS = ContextCompat.checkSelfPermission(
-                        context, Manifest.permission.SEND_SMS
-                    ) == PackageManager.PERMISSION_GRANTED
-
-                    if (hasFineLocation && hasSMS) {
-                        // Mark as complete and go to login
-                        val sharedPref = context.getSharedPreferences("raksha_prefs", Context.MODE_PRIVATE)
-                        sharedPref.edit().putBoolean("onboarding_complete", true).apply()
-
-                        navController.navigate("login") {
-                            popUpTo("onboarding") { inclusive = true }
-                        }
-                    } else {
-                        // Go to permissions to finish setup
-                        navController.navigate("permissions") {
-                            // inclusive = false here because we want to be able to go
-                            // back to onboarding from permissions if user cancels
-                            popUpTo("onboarding") { inclusive = false }
-                        }
+                    // 2. Strict Navigation: Always go to permissions screen first
+                    navController.navigate("permissions") {
+                        popUpTo("onboarding") { inclusive = true }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -204,7 +179,7 @@ fun FeatureItem(icon: androidx.compose.ui.graphics.vector.ImageVector, title: St
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 12.dp),
         verticalAlignment = Alignment.Top
     ) {
         Box(
@@ -223,8 +198,17 @@ fun FeatureItem(icon: androidx.compose.ui.graphics.vector.ImageVector, title: St
         }
         Spacer(modifier = Modifier.width(16.dp))
         Column {
-            Text(text = title, color = Color.White, fontSize = 14.sp)
-            Text(text = subtitle, color = Color.Gray, fontSize = 12.sp)
+            Text(
+                text = title,
+                color = Color.White,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = subtitle,
+                color = Color.Gray,
+                fontSize = 13.sp
+            )
         }
     }
 }

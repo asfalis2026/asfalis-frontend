@@ -34,26 +34,18 @@ fun PermissionsScreen(navController: NavController) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
 
-    // --- FIXED NAVIGATION LOGIC ---
-    fun navigateNext() {
+    // --- UPDATED NAVIGATION LOGIC ---
+    // This function now strictly moves the user to the LOGIN screen.
+    fun navigateToLogin() {
         val sharedPref = context.getSharedPreferences("raksha_prefs", Context.MODE_PRIVATE)
 
-        // 1. Mark onboarding as complete so splash screen doesn't show it again
-        sharedPref.edit().putBoolean("onboarding_complete", true).apply()
+        // 1. Mark permissions as "handled" so Splash skips this next time
+        sharedPref.edit().putBoolean("permissions_granted", true).apply()
 
-        // 2. Check if user is already logged in
-        val isUserLoggedIn = sharedPref.getBoolean("is_logged_in", false)
-
-        if (isUserLoggedIn) {
-            navController.navigate("dashboard") {
-                // Clear the entire onboarding/permission stack
-                popUpTo(0) { inclusive = true }
-            }
-        } else {
-            navController.navigate("login") {
-                // Clear the onboarding/permission stack
-                popUpTo("onboarding") { inclusive = true }
-            }
+        // 2. ALWAYS go to login (Never skip to Dashboard from here)
+        navController.navigate("login") {
+            // Clear the permission screen from the backstack
+            popUpTo("permissions") { inclusive = true }
         }
     }
 
@@ -61,7 +53,8 @@ fun PermissionsScreen(navController: NavController) {
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { _ ->
-        navigateNext()
+        // After system dialog closes, move to login regardless of choice
+        navigateToLogin()
     }
 
     val backgroundGradient = Brush.verticalGradient(
@@ -78,6 +71,7 @@ fun PermissionsScreen(navController: NavController) {
     ) {
         Spacer(Modifier.height(40.dp))
 
+        // Shield Icon Header
         Box(
             modifier = Modifier
                 .size(80.dp)
@@ -105,7 +99,7 @@ fun PermissionsScreen(navController: NavController) {
         Spacer(Modifier.height(12.dp))
 
         Text(
-            text = "To keep you safe, we need access to a few vital features of your phone.",
+            text = "To keep you safe, ASFALIS needs access to these vital features.",
             color = Color.Gray,
             fontSize = 16.sp,
             textAlign = TextAlign.Center,
@@ -114,6 +108,7 @@ fun PermissionsScreen(navController: NavController) {
 
         Spacer(Modifier.height(48.dp))
 
+        // Permission Items List
         PermissionItem(
             icon = Icons.Outlined.LocationOn,
             title = "Location Access",
@@ -127,12 +122,12 @@ fun PermissionsScreen(navController: NavController) {
         PermissionItem(
             icon = Icons.Outlined.NotificationsActive,
             title = "Critical Alerts",
-            desc = "To ensure alerts are heard even in Do Not Disturb."
+            desc = "To ensure SOS sounds are heard even in silent mode."
         )
 
         Spacer(Modifier.weight(1f))
 
-        // --- UPDATED BUTTON ACTION ---
+        // --- PRIMARY BUTTON ACTION ---
         Button(
             onClick = {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -158,10 +153,11 @@ fun PermissionsScreen(navController: NavController) {
             )
         }
 
+        // Secondary Skip Button
         TextButton(
             onClick = {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                navigateNext()
+                navigateToLogin()
             },
             modifier = Modifier.padding(vertical = 8.dp)
         ) {

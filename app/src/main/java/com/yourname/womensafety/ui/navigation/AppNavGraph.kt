@@ -19,7 +19,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.*
+import androidx.navigation.navArgument
 import com.yourname.womensafety.ui.screens.*
 
 @Composable
@@ -29,7 +31,7 @@ fun AppNavGraph() {
     val currentRoute = navBackStackEntry?.destination?.route
     val haptic = LocalHapticFeedback.current
 
-    val bottomBarScreens = listOf("dashboard", "map", "contacts", "profile")
+    val bottomBarScreens = listOf("dashboard", "sos_history", "contacts", "profile")
 
     Scaffold(
         containerColor = Color.Black,
@@ -38,14 +40,13 @@ fun AppNavGraph() {
                 NavigationBar(
                     containerColor = Color.Black,
                     tonalElevation = 0.dp,
-                    // Slightly taller to accommodate bigger icons and the top bar
                     modifier = Modifier
                         .navigationBarsPadding()
-                        .height(85.dp)
+                        .height(80.dp)
                 ) {
                     val items = listOf(
                         Triple("dashboard", "Home", Icons.Default.Home),
-                        Triple("map", "Live Map", Icons.Default.Map),
+                        Triple("sos_history", "History", Icons.Default.History),
                         Triple("contacts", "Trusted", Icons.Default.Groups),
                         Triple("profile", "Profile", Icons.Default.Person)
                     )
@@ -71,26 +72,21 @@ fun AppNavGraph() {
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.Center
                                 ) {
-                                    // --- FIGMA RED BAR INDICATOR ---
                                     if (isSelected) {
                                         Box(
                                             modifier = Modifier
-                                                .width(24.dp)
+                                                .width(20.dp)
                                                 .height(3.dp)
-                                                .clip(RoundedCornerShape(bottomStart = 10.dp, bottomEnd = 10.dp))
+                                                .clip(RoundedCornerShape(10.dp))
                                                 .background(Color(0xFFE10600))
                                         )
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                    } else {
-                                        // Invisible spacer to prevent icon jump
-                                        Spacer(modifier = Modifier.height(11.dp))
+                                        Spacer(modifier = Modifier.height(4.dp))
                                     }
 
-                                    // --- BIGGER ICONS ---
                                     Icon(
                                         imageVector = icon,
                                         contentDescription = label,
-                                        modifier = Modifier.size(28.dp), // Increased size
+                                        modifier = Modifier.size(26.dp),
                                         tint = if (isSelected) Color(0xFFE10600) else Color.Gray
                                     )
                                 }
@@ -98,13 +94,13 @@ fun AppNavGraph() {
                             label = {
                                 Text(
                                     text = label,
-                                    fontSize = 11.sp,
+                                    fontSize = 10.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                     color = if (isSelected) Color(0xFFE10600) else Color.Gray
                                 )
                             },
                             colors = NavigationBarItemDefaults.colors(
-                                indicatorColor = Color.Transparent // Removes the default pill background
+                                indicatorColor = Color.Transparent
                             )
                         )
                     }
@@ -121,28 +117,27 @@ fun AppNavGraph() {
                 navController = navController,
                 startDestination = "app_splash",
                 enterTransition = { EnterTransition.None },
-                exitTransition = { ExitTransition.None },
-                popEnterTransition = { EnterTransition.None },
-                popExitTransition = { ExitTransition.None }
+                exitTransition = { ExitTransition.None }
             ) {
                 composable("app_splash") { AppSplashScreen(navController) }
                 composable("onboarding") { OnboardingScreen(navController) }
                 composable("permissions") { PermissionsScreen(navController) }
                 composable("login") { LoginScreen(navController) }
-                composable("sign_in_email") { SignInWithEmail(navController) }
-                composable("sign_in_phone") { SignInWithPhone(navController) }
-                composable("verify_otp") { VerifyOTPScreen(navController) }
-
+                composable(
+                    route = "verify_otp/{email}",
+                    arguments = listOf(navArgument("email") { type = NavType.StringType })
+                ) { backStackEntry ->
+                    val email = backStackEntry.arguments?.getString("email") ?: ""
+                    VerifyOTPScreen(navController, email)
+                }
                 composable("dashboard") { DashboardScreen(navController) }
-                composable("map") { LiveMapScreen(onBack = { navController.popBackStack() }) }
+                composable("sos_history") { SOSHistoryScreen(navController) }
                 composable("contacts") { TrustedContactsScreen(onBack = { navController.popBackStack() }) }
                 composable("profile") { ProfileScreen(navController) }
-
                 composable("settings") { SettingsScreen(navController) }
                 composable("privacy_policy") { PrivacyPolicyScreen(navController) }
                 composable("help") { HelpSupportScreen(navController) }
                 composable("about") { AboutAppScreen(navController) }
-
                 composable("sos_alert") {
                     SOSAlertScreen(onSafe = {
                         navController.navigate("dashboard") {

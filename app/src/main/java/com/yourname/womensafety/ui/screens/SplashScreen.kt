@@ -27,34 +27,44 @@ fun AppSplashScreen(navController: NavController) {
     val context = LocalContext.current
     val scale = remember { Animatable(0.85f) }
 
-    // Use a derived state or local variable to ensure we read fresh data
     LaunchedEffect(key1 = true) {
-        // Start animation immediately
+        // 1. Logo Animation
         scale.animateTo(
             targetValue = 1f,
-            animationSpec = tween(durationMillis = 600)
+            animationSpec = tween(durationMillis = 800)
         )
 
-        // Wait for the animation and give the OS time to initialize SharedPreferences
+        // 2. Branding Display Duration
         delay(1600)
 
+        // 3. Load State Flags
         val sharedPref = context.getSharedPreferences("raksha_prefs", Context.MODE_PRIVATE)
         val isOnboardingComplete = sharedPref.getBoolean("onboarding_complete", false)
+        val arePermissionsGranted = sharedPref.getBoolean("permissions_granted", false)
         val isUserLoggedIn = sharedPref.getBoolean("is_logged_in", false)
 
-        // Clear the splash from the backstack completely using popUpTo(0)
-        // This ensures the user can't "back" into the splash screen.
+        // 4. MASTER NAVIGATION LOGIC
+        // We check these in order of a new user's journey.
         when {
+            // Journey Start: Needs to see Get Started
             !isOnboardingComplete -> {
                 navController.navigate("onboarding") {
                     popUpTo(0) { inclusive = true }
                 }
             }
+            // Journey Step 2: Needs to grant permissions
+            !arePermissionsGranted -> {
+                navController.navigate("permissions") {
+                    popUpTo(0) { inclusive = true }
+                }
+            }
+            // Journey Complete: User is fully verified
             isUserLoggedIn -> {
                 navController.navigate("dashboard") {
                     popUpTo(0) { inclusive = true }
                 }
             }
+            // Journey Step 3: Seen intro and permissions, but needs to Login
             else -> {
                 navController.navigate("login") {
                     popUpTo(0) { inclusive = true }
@@ -68,7 +78,7 @@ fun AppSplashScreen(navController: NavController) {
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    listOf(Color.Black, Color(0xFF120000), Color.Black)
+                    listOf(Color.Black, Color(0xFF1A0000), Color.Black)
                 )
             ),
         contentAlignment = Alignment.Center
@@ -76,27 +86,31 @@ fun AppSplashScreen(navController: NavController) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Image(
                 painter = painterResource(id = R.drawable.splash_logo),
-                contentDescription = "Raksha Logo",
+                contentDescription = "Asfalis Logo",
                 modifier = Modifier
-                    .size(300.dp)
+                    .size(260.dp)
                     .graphicsLayer {
                         scaleX = scale.value
                         scaleY = scale.value
                     }
             )
+
             Spacer(modifier = Modifier.height(10.dp))
+
             Text(
-                text = "RAKSHA",
+                text = "ASFALIS",
                 color = Color.White,
-                fontSize = 40.sp,
+                fontSize = 42.sp,
                 fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 4.sp
+                letterSpacing = 6.sp
             )
+
             Text(
                 text = "Your Safety, Our Priority",
-                color = Color.Gray.copy(alpha = 0.8f),
+                color = Color(0xFFE10600).copy(alpha = 0.8f),
                 fontSize = 14.sp,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 1.sp
             )
         }
     }
