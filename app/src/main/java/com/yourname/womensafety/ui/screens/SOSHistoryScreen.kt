@@ -11,7 +11,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -20,19 +20,23 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-
-// Mock data class for the history items
-data class SOSAlert(val date: String, val time: String, val location: String)
+import com.yourname.womensafety.data.network.dto.SosHistoryItem
+import com.yourname.womensafety.ui.viewmodels.SosHistoryUiState
+import com.yourname.womensafety.ui.viewmodels.SosHistoryViewModel
 
 @Composable
 fun SOSHistoryScreen(navController: NavController) {
-    // Mock Data
-    val alertHistory = listOf(
-        SOSAlert("Oct 24, 2025", "10:30 PM", "Sector 62, Noida"),
-        SOSAlert("Oct 12, 2025", "08:15 PM", "Cyber City, Gurgaon"),
-        SOSAlert("Sept 30, 2025", "11:45 PM", "Hauz Khas, Delhi")
+    val historyViewModel: SosHistoryViewModel = viewModel(
+        factory = SosHistoryViewModel.Factory
     )
+    val uiState by historyViewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        historyViewModel.loadHistory()
+    }
 
     Box(
         modifier = Modifier
@@ -49,24 +53,16 @@ fun SOSHistoryScreen(navController: NavController) {
                 .statusBarsPadding()
                 .padding(horizontal = 24.dp)
         ) {
-            // --- RESTORED BACK BUTTON ---
             Spacer(Modifier.height(16.dp))
             IconButton(
                 onClick = { navController.popBackStack() },
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(Color.White.copy(0.08f))
+                modifier = Modifier.clip(CircleShape).background(Color.White.copy(0.08f))
             ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = Color.White
-                )
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
             }
 
             Spacer(Modifier.height(20.dp))
 
-            // --- Header: Consistent with Dashboard ---
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -81,30 +77,44 @@ fun SOSHistoryScreen(navController: NavController) {
                     shape = CircleShape,
                     color = Color.White.copy(alpha = 0.08f)
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.History,
-                        contentDescription = "History Icon",
-                        tint = Color.White,
-                        modifier = Modifier.padding(10.dp)
-                    )
+                    Icon(Icons.Outlined.History, contentDescription = null, tint = Color.White, modifier = Modifier.padding(10.dp))
                 }
             }
 
             Spacer(Modifier.height(32.dp))
 
-            if (alertHistory.isEmpty()) {
-                // Empty State
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No SOS alerts triggered yet.", color = Color.Gray, fontSize = 16.sp)
+            when (val state = uiState) {
+                is SosHistoryUiState.Loading -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Color(0xFFE10600))
+                    }
                 }
-            } else {
-                // Scrollable List of History
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    contentPadding = PaddingValues(bottom = 32.dp)
-                ) {
-                    items(alertHistory) { alert ->
-                        HistoryCard(alert)
+                is SosHistoryUiState.Error -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(state.message, color = Color(0xFFE10600), fontSize = 15.sp)
+                            Spacer(Modifier.height(16.dp))
+                            Button(
+                                onClick = { historyViewModel.loadHistory() },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE10600))
+                            ) { Text("Retry") }
+                        }
+                    }
+                }
+                is SosHistoryUiState.Success -> {
+                    if (state.items.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("No SOS alerts triggered yet.", color = Color.Gray, fontSize = 16.sp)
+                        }
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            contentPadding = PaddingValues(bottom = 32.dp)
+                        ) {
+                            items(state.items) { item ->
+                                SosHistoryCard(item)
+                            }
+                        }
                     }
                 }
             }
@@ -113,58 +123,51 @@ fun SOSHistoryScreen(navController: NavController) {
 }
 
 @Composable
-fun HistoryCard(alert: SOSAlert) {
+fun SosHistoryCard(item: SosHistoryItem) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = Color.White.copy(0.05f),
         shape = RoundedCornerShape(24.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(0.1f))
     ) {
-        Row(
-            modifier = Modifier.padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Red Alert Icon Circle
+        Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                modifier = Modifier
-                    .size(50.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFFE10600).copy(0.15f)),
+                modifier = Modifier.size(50.dp).clip(CircleShape).background(Color(0xFFE10600).copy(0.15f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    Icons.Outlined.LocationOn,
-                    null,
-                    tint = Color(0xFFE10600),
-                    modifier = Modifier.size(26.dp)
-                )
+                Icon(Icons.Outlined.LocationOn, null, tint = Color(0xFFE10600), modifier = Modifier.size(26.dp))
             }
 
             Spacer(Modifier.width(16.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = alert.location,
+                    text = item.triggerType.replaceFirstChar { it.uppercase() },
                     color = Color.White,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    text = "${alert.date} • ${alert.time}",
+                    text = item.triggeredAt,
                     color = Color.Gray,
                     fontSize = 13.sp
                 )
+                item.address?.let {
+                    Text(text = it, color = Color.Gray, fontSize = 12.sp)
+                }
             }
 
-            // "Alert Sent" Status tag
             Surface(
-                color = Color(0xFFE10600).copy(0.2f),
+                color = when (item.status) {
+                    "cancelled" -> Color.Gray.copy(0.2f)
+                    else -> Color(0xFFE10600).copy(0.2f)
+                },
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Text(
-                    "SENT",
+                    text = item.status.uppercase(),
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    color = Color(0xFFE10600),
+                    color = if (item.status == "cancelled") Color.Gray else Color(0xFFE10600),
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -172,3 +175,4 @@ fun HistoryCard(alert: SOSAlert) {
         }
     }
 }
+

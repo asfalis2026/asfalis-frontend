@@ -1,5 +1,6 @@
 package com.yourname.womensafety.ui.screens
 
+import android.location.Location
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,21 +18,56 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.android.gms.location.LocationServices
+import com.yourname.womensafety.ui.viewmodels.SosViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
+@Suppress("MissingPermission")
 @Composable
 fun SOSAlertScreen(onSafe: () -> Unit) {
-    var ticks by remember { mutableIntStateOf(10) } // Updated to 10
+    val context = LocalContext.current
+    val sosViewModel: SosViewModel = viewModel(factory = SosViewModel.Factory)
+    val uiState by sosViewModel.uiState.collectAsState()
+    var ticks by remember { mutableIntStateOf(10) }
 
+    // Trigger SOS with real GPS coordinates
+    LaunchedEffect(Unit) {
+        val fusedClient = LocationServices.getFusedLocationProviderClient(context)
+        val location = try {
+            suspendCancellableCoroutine<Location?> { cont ->
+                fusedClient.lastLocation
+                    .addOnSuccessListener { loc -> cont.resume(loc) }
+                    .addOnFailureListener { cont.resume(null) }
+            }
+        } catch (e: SecurityException) { null }
+        sosViewModel.triggerSos(
+            latitude = location?.latitude ?: 0.0,
+            longitude = location?.longitude ?: 0.0
+        )
+    }
+
+    // Auto-send when countdown reaches 0
     LaunchedEffect(Unit) {
         while (ticks > 0) {
             delay(1000L)
             ticks--
         }
+        if (!uiState.isCancelled) {
+            sosViewModel.sendNow()
+        }
+    }
+
+    // Navigate back when cancelled or sent
+    LaunchedEffect(uiState.isCancelled) {
+        if (uiState.isCancelled) onSafe()
     }
 
     val infiniteTransition = rememberInfiniteTransition(label = "alert")
@@ -74,11 +110,10 @@ fun SOSAlertScreen(onSafe: () -> Unit) {
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // --- REFINED TYPOGRAPHY (Matched to Dashboard) ---
             Text(
                 text = "ALERT TRIGGERED",
                 color = Color.White,
-                fontSize = 24.sp, // Reduced for cleaner look
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.5.sp
             )
@@ -102,7 +137,7 @@ fun SOSAlertScreen(onSafe: () -> Unit) {
 
             Spacer(modifier = Modifier.height(50.dp))
 
-            // --- COUNTDOWN (Modern Minimal Look) ---
+            // --- COUNTDOWN ---
             Box(contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(
                     progress = { ticks / 10f },
@@ -111,12 +146,11 @@ fun SOSAlertScreen(onSafe: () -> Unit) {
                     strokeWidth = 6.dp,
                     trackColor = Color.White.copy(0.05f),
                 )
-
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = ticks.toString(),
                         color = Color.White,
-                        fontSize = 72.sp, // Slightly smaller/cleaner
+                        fontSize = 72.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
@@ -132,17 +166,18 @@ fun SOSAlertScreen(onSafe: () -> Unit) {
             Spacer(modifier = Modifier.height(30.dp))
 
             Text(
-                text = "Sending Auto-SOS...",
-                color = Color.White.copy(0.6f),
+                text = if (uiState.isSent) "SOS Dispatched!" else "Sending Auto-SOS...",
+                color = if (uiState.isSent) Color(0xFF00E676) else Color.White.copy(0.6f),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium
             )
 
             Spacer(modifier = Modifier.height(50.dp))
 
-            // --- BUTTONS (Matched to Dashboard Corner Radius) ---
+            // --- I'M SAFE BUTTON ---
             Button(
-                onClick = onSafe,
+                onClick = { sosViewModel.cancelSos() },
+                enabled = !uiState.isSent,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(58.dp),
@@ -155,15 +190,31 @@ fun SOSAlertScreen(onSafe: () -> Unit) {
 
             Spacer(modifier = Modifier.height(14.dp))
 
+            // --- SEND NOW BUTTON ---
             Button(
-                onClick = { /* Immediate trigger */ },
+                onClick = { sosViewModel.sendNow() },
+                enabled = !uiState.isSent && !uiState.isSending,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(58.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC60000)),
                 shape = RoundedCornerShape(18.dp)
             ) {
-                Text("SEND SOS NOW", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                if (uiState.isSending) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("SEND SOS NOW", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            // Error
+            uiState.errorMessage?.let { msg ->
+                Spacer(Modifier.height(12.dp))
+                Text(msg, color = Color.Red, fontSize = 13.sp, textAlign = TextAlign.Center)
             }
         }
 
@@ -189,3 +240,4 @@ fun SOSAlertScreen(onSafe: () -> Unit) {
         }
     }
 }
+

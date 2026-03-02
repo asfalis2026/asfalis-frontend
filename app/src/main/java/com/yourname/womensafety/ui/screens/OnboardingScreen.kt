@@ -1,7 +1,6 @@
 package com.yourname.womensafety.ui.screens
 
 import android.Manifest
-import android.content.Context
 import android.content.pm.PackageManager
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -29,11 +28,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
+import com.yourname.womensafety.data.AppServiceLocator
+import kotlinx.coroutines.launch
 
 @Composable
 fun OnboardingScreen(navController: NavController) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val scale = animateFloatAsState(targetValue = 1f, label = "")
 
     Box(
@@ -136,9 +138,10 @@ fun OnboardingScreen(navController: NavController) {
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
 
-                    // 1. Mark onboarding as complete in SharedPreferences
-                    val sharedPref = context.getSharedPreferences("raksha_prefs", Context.MODE_PRIVATE)
-                    sharedPref.edit().putBoolean("onboarding_complete", true).apply()
+                    // 1. Mark onboarding as complete in DataStore
+                    scope.launch {
+                        com.yourname.womensafety.data.AppServiceLocator.tokenManager.setOnboardingComplete()
+                    }
 
                     // 2. Strict Navigation: Always go to permissions screen first
                     navController.navigate("permissions") {

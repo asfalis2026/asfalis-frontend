@@ -20,15 +20,49 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.yourname.womensafety.data.network.dto.UpdateSettingsRequest
+import com.yourname.womensafety.ui.viewmodels.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(navController: NavController) {
-    // These states would ideally be handled by a ViewModel and saved to DataStore/Room
+    val settingsViewModel: SettingsViewModel = viewModel(
+        factory = SettingsViewModel.Factory
+    )
+    val isLoading by settingsViewModel.isLoading.collectAsStateWithLifecycle()
+    val saveSuccess by settingsViewModel.saveSuccess.collectAsStateWithLifecycle()
+    val errorMessage by settingsViewModel.errorMessage.collectAsStateWithLifecycle()
+    val loadedSettings by settingsViewModel.settings.collectAsStateWithLifecycle()
+
+    // Local editable state — populated from API on load
     var sensitivity by remember { mutableStateOf("Medium") }
     var sosMessage by remember {
         mutableStateOf("Emergency! I need help. This is an automated SOS alert from ASFALIS. My live location is attached.")
+    }
+
+    // Populate local state when settings arrive from API
+    LaunchedEffect(loadedSettings) {
+        loadedSettings?.let { s ->
+            sensitivity = when (s.shakeSensitivity) {
+                "low" -> "Low"
+                "high" -> "High"
+                else -> "Medium"
+            }
+            s.sosMessage?.let { sosMessage = it }
+        }
+    }
+
+    // Load settings from API
+    LaunchedEffect(Unit) {
+        settingsViewModel.loadSettings()
+    }
+
+    // Pop back when saved successfully
+    LaunchedEffect(saveSuccess) {
+        if (saveSuccess) navController.popBackStack()
     }
 
     val backgroundGradient = Brush.verticalGradient(
@@ -65,13 +99,27 @@ fun SettingsScreen(navController: NavController) {
             // Save Checkmark Icon
             IconButton(
                 onClick = {
-                    // Add Save Logic Here (Backend/SharedPrefs)
-                    navController.popBackStack()
+                    val request = UpdateSettingsRequest(
+                        sosMessage = sosMessage.trim().take(500),
+                        shakeSensitivity = sensitivity.lowercase()
+                    )
+                    settingsViewModel.saveSettings(request)
                 },
-                modifier = Modifier.clip(CircleShape).background(Color(0xFFE10600))
+                modifier = Modifier.clip(CircleShape).background(Color(0xFFE10600)),
+                enabled = !isLoading
             ) {
-                Icon(Icons.Default.Check, null, tint = Color.White)
+                if (isLoading) {
+                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.Default.Check, null, tint = Color.White)
+                }
             }
+        }
+
+        // Error message
+        errorMessage?.let {
+            Spacer(Modifier.height(12.dp))
+            Text(it, color = Color(0xFFE10600), fontSize = 13.sp)
         }
 
         Spacer(Modifier.height(40.dp))
@@ -87,7 +135,7 @@ fun SettingsScreen(navController: NavController) {
 
         OutlinedTextField(
             value = sosMessage,
-            onValueChange = { sosMessage = it },
+            onValueChange = { if (it.length <= 500) sosMessage = it },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(140.dp),
@@ -100,7 +148,8 @@ fun SettingsScreen(navController: NavController) {
                 focusedBorderColor = Color(0xFFE10600),
                 unfocusedBorderColor = Color.White.copy(0.1f)
             ),
-            textStyle = LocalTextStyle.current.copy(fontSize = 14.sp, lineHeight = 20.sp)
+            textStyle = LocalTextStyle.current.copy(fontSize = 14.sp, lineHeight = 20.sp),
+            supportingText = { Text("${sosMessage.length}/500", color = Color.Gray, fontSize = 11.sp) }
         )
 
         Spacer(Modifier.height(32.dp))
@@ -128,7 +177,7 @@ fun SettingsScreen(navController: NavController) {
                     listOf("Low", "Medium", "High").forEach { level ->
                         val isSelected = sensitivity == level
                         Button(
-                            onClick = { sensitivity = level }, // Haptic removed as requested
+                            onClick = { sensitivity = level },
                             modifier = Modifier
                                 .weight(1f)
                                 .height(45.dp),
@@ -159,7 +208,7 @@ fun SettingsScreen(navController: NavController) {
                         .padding(12.dp)
                 ) {
                     Text(
-                        text = when(sensitivity) {
+                        text = when (sensitivity) {
                             "Low" -> "Optimized for high-activity environments. Requires a very vigorous shake."
                             "High" -> "Maximum sensitivity. Triggers easily; recommended for emergency use only."
                             else -> "Balanced detection. Triggers on a deliberate, strong shake."

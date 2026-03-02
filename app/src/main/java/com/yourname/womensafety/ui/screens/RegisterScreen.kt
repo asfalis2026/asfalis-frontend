@@ -25,7 +25,8 @@ import androidx.navigation.NavController
 fun RegisterScreen(navController: NavController) {
     val haptic = LocalHapticFeedback.current
     var fullName by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
+    var phoneInput by remember { mutableStateOf("") }
+    var selectedCountry by remember { mutableStateOf(ALL_COUNTRIES.first()) }
     var password by remember { mutableStateOf("") }
     var country by remember { mutableStateOf("") }
 
@@ -51,12 +52,16 @@ fun RegisterScreen(navController: NavController) {
 
             Spacer(Modifier.height(30.dp))
 
-            // Fields
             AuthInput(value = fullName, onValueChange = { fullName = it }, label = "Full Name", icon = Icons.Default.Person)
             Spacer(Modifier.height(16.dp))
             AuthInput(value = country, onValueChange = { country = it }, label = "Country", icon = Icons.Default.Public)
             Spacer(Modifier.height(16.dp))
-            AuthInput(value = email, onValueChange = { email = it }, label = "Email Address", icon = Icons.Default.Email)
+            PhoneInputRow(
+                selectedCountry = selectedCountry,
+                onCountrySelected = { selectedCountry = it },
+                phoneInput = phoneInput,
+                onPhoneChanged = { phoneInput = it.filter { c -> c.isDigit() } }
+            )
             Spacer(Modifier.height(16.dp))
             AuthInput(value = password, onValueChange = { password = it }, label = "Password", icon = Icons.Default.Lock, isPassword = true)
 
@@ -65,8 +70,8 @@ fun RegisterScreen(navController: NavController) {
             Button(
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    // Passing email to OTP screen so it knows where to "send" it
-                    navController.navigate("verify_otp/$email")
+                    val fullPhone = selectedCountry.dialCode + phoneInput.trim()
+                    navController.navigate("verify_otp/$fullPhone")
                 },
                 modifier = Modifier.fillMaxWidth().height(58.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE10600)),

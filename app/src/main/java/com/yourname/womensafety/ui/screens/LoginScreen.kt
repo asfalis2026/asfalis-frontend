@@ -1,13 +1,17 @@
 package com.yourname.womensafety.ui.screens
 
 import android.app.Activity
-import android.content.Context
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Shield
@@ -23,28 +27,78 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import kotlinx.coroutines.delay
+import com.yourname.womensafety.ui.viewmodels.AuthViewModel
 
 @Composable
 fun LoginScreen(navController: NavController) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
+    val authViewModel: AuthViewModel = viewModel(factory = AuthViewModel.Factory)
+    val uiState by authViewModel.uiState.collectAsState()
 
-    // Toggle between "Login" and "Register" view
     var isLoginMode by remember { mutableStateOf(true) }
 
-    // Form states
-    var email by remember { mutableStateOf("") }
+    // Phone-based form states
+    var selectedCountry by remember { mutableStateOf(ALL_COUNTRIES.first()) } // India (+91) default
+    var phoneInput by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var fullName by remember { mutableStateOf("") }
     var country by remember { mutableStateOf("") }
 
     // Prevent going back to Splash; close app instead
     BackHandler { (context as? Activity)?.finish() }
+
+    // Navigate on successful login/register
+    LaunchedEffect(uiState.isSuccess) {
+        if (uiState.isSuccess) {
+            navController.navigate("dashboard") { popUpTo(0) { inclusive = true } }
+            authViewModel.clearError()
+        }
+    }
+
+    // After Step 1 register — Twilio has sent the OTP SMS; navigate to OTP screen
+    LaunchedEffect(uiState.registeredPhone) {
+        uiState.registeredPhone?.let { phoneNumber ->
+            navController.navigate("verify_otp/${Uri.encode(phoneNumber)}")
+            authViewModel.clearError()
+        }
+    }
+
+    // PHONE_NOT_VERIFIED during login → toast the error, then redirect to OTP screen
+    LaunchedEffect(uiState.unverifiedPhone) {
+        uiState.unverifiedPhone?.let { phoneNumber ->
+            Toast.makeText(context, "Phone not verified. Sending OTP to $phoneNumber…", Toast.LENGTH_LONG).show()
+            authViewModel.resendOtp(phoneNumber) // send a fresh OTP in case the original expired
+            delay(1500L) // let the toast be readable before switching screens
+            navController.navigate("verify_otp/${Uri.encode(phoneNumber)}")
+            authViewModel.clearError()
+        }
+    }
+
+    // Show error messages
+    LaunchedEffect(uiState.errorMessage) {
+        uiState.errorMessage?.let { message ->
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            authViewModel.clearError()
+        }
+    }
+
+    // Forgot password OTP dispatched by Twilio — navigate to reset-password screen
+    LaunchedEffect(uiState.forgotPasswordSent) {
+        uiState.forgotPasswordSent?.let { phoneNumber ->
+            navController.navigate("reset_password/${Uri.encode(phoneNumber)}")
+            authViewModel.clearError()
+        }
+    }
 
     val backgroundGradient = Brush.verticalGradient(
         colors = listOf(Color.Black, Color(0xFF1A0000), Color(0xFF330000))
@@ -92,7 +146,7 @@ fun LoginScreen(navController: NavController) {
 
             Spacer(Modifier.height(40.dp))
 
-            // --- DYNAMIC FORM ---
+            // --- REGISTER-ONLY FIELDS ---
             if (!isLoginMode) {
                 AuthTextField(
                     value = fullName,
@@ -110,11 +164,12 @@ fun LoginScreen(navController: NavController) {
                 Spacer(Modifier.height(16.dp))
             }
 
-            AuthTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = "Email Address",
-                icon = Icons.Default.Email
+            // --- PHONE NUMBER FIELD (shared by login & register) ---
+            PhoneInputRow(
+                selectedCountry = selectedCountry,
+                onCountrySelected = { selectedCountry = it },
+                phoneInput = phoneInput,
+                onPhoneChanged = { phoneInput = it.filter { c -> c.isDigit() } }
             )
 
             Spacer(Modifier.height(16.dp))
@@ -129,7 +184,14 @@ fun LoginScreen(navController: NavController) {
 
             if (isLoginMode) {
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                    TextButton(onClick = { /* Implement Forgot Password */ }) {
+                    TextButton(onClick = {
+                        val phoneNumber = selectedCountry.dialCode + phoneInput.trim()
+                        if (phoneInput.isNotBlank()) {
+                            authViewModel.forgotPassword(phoneNumber)
+                        } else {
+                            Toast.makeText(context, "Enter your phone number first", Toast.LENGTH_SHORT).show()
+                        }
+                    }) {
                         Text("Forgot Password?", color = Color(0xFFE10600), fontSize = 14.sp)
                     }
                 }
@@ -141,41 +203,42 @@ fun LoginScreen(navController: NavController) {
             Button(
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-
-                    if (email.isNotEmpty() && password.isNotEmpty()) {
-                        val sharedPref = context.getSharedPreferences("raksha_prefs", Context.MODE_PRIVATE)
-
-                        if (isLoginMode) {
-                            // 1. RETURNING USER: Show Popup & Go to Dashboard
-                            val userName = email.substringBefore("@")
-                            Toast.makeText(context, "Welcome back, $userName!", Toast.LENGTH_SHORT).show()
-
-                            // Save Login State
-                            sharedPref.edit().putBoolean("is_logged_in", true).apply()
-
-                            navController.navigate("dashboard") {
-                                popUpTo(0) { inclusive = true }
-                            }
+                    val fullPhone = selectedCountry.dialCode + phoneInput.trim()
+                    if (isLoginMode) {
+                        if (phoneInput.isNotBlank() && password.isNotBlank()) {
+                            authViewModel.loginWithPhone(fullPhone, password)
                         } else {
-                            // 2. NEW USER: Go to OTP verification
-                            navController.navigate("verify_otp/$email")
+                            Toast.makeText(context, "Please enter phone number and password", Toast.LENGTH_SHORT).show()
                         }
                     } else {
-                        Toast.makeText(context, "Please enter email and password", Toast.LENGTH_SHORT).show()
+                        if (fullName.isNotBlank() && phoneInput.isNotBlank() && password.isNotBlank() && country.isNotBlank()) {
+                            authViewModel.registerWithPhone(fullName, fullPhone, password, country)
+                        } else {
+                            Toast.makeText(context, "Please fill in all fields", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 },
+                enabled = !uiState.isLoading,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE10600)),
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Text(
-                    text = if (isLoginMode) "Login" else "Get Verification Code",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
+                if (uiState.isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(
+                        text = if (isLoginMode) "Login" else "Get Verification Code",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
             }
 
             Spacer(Modifier.height(24.dp))
@@ -195,6 +258,135 @@ fun LoginScreen(navController: NavController) {
                         color = Color(0xFFE10600),
                         fontWeight = FontWeight.Bold
                     )
+                }
+            }
+        }
+    }
+}
+
+/** Inline phone number row: country-code badge + digit-only input. */
+@Composable
+fun PhoneInputRow(
+    selectedCountry: CountryDialCode,
+    onCountrySelected: (CountryDialCode) -> Unit,
+    phoneInput: String,
+    onPhoneChanged: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var search by remember { mutableStateOf("") }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text("Phone Number", color = Color.Gray, fontSize = 12.sp,
+            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp))
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Country code chip
+            OutlinedButton(
+                onClick = { expanded = true; search = "" },
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White.copy(0.05f)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(0.1f)),
+                contentPadding = PaddingValues(horizontal = 12.dp),
+                modifier = Modifier.height(56.dp)
+            ) {
+                Text(
+                    "${selectedCountry.flag} ${selectedCountry.dialCode}",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(Modifier.width(4.dp))
+                Icon(Icons.Default.ArrowDropDown, null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+            }
+
+            // Phone digits field
+            OutlinedTextField(
+                value = phoneInput,
+                onValueChange = onPhoneChanged,
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("9876543210", color = Color.Gray.copy(0.5f)) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedContainerColor = Color.White.copy(0.05f),
+                    unfocusedContainerColor = Color.White.copy(0.05f),
+                    focusedBorderColor = Color(0xFFE10600),
+                    unfocusedBorderColor = Color.White.copy(0.1f),
+                    cursorColor = Color(0xFFE10600)
+                ),
+                shape = RoundedCornerShape(14.dp),
+                singleLine = true
+            )
+        }
+    }
+
+    // Country picker dialog (reuses existing ALL_COUNTRIES list from TrustedContacts)
+    if (expanded) {
+        Dialog(onDismissRequest = { expanded = false }) {
+            Box(
+                modifier = Modifier.fillMaxSize().background(Color.Black.copy(0.6f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .heightIn(max = 480.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color(0xFF1A0000))
+                        .padding(16.dp)
+                ) {
+                    Text("Select Country", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = search,
+                        onValueChange = { search = it },
+                        placeholder = { Text("Search country...", color = Color.Gray) },
+                        singleLine = true,
+                        leadingIcon = { Icon(Icons.Default.Search, null, tint = Color.Gray, modifier = Modifier.size(18.dp)) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedContainerColor = Color.White.copy(0.05f),
+                            unfocusedContainerColor = Color.White.copy(0.05f),
+                            focusedBorderColor = Color(0xFFE10600),
+                            unfocusedBorderColor = Color.White.copy(0.2f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    val filtered = ALL_COUNTRIES.filter {
+                        it.name.contains(search, ignoreCase = true) || it.dialCode.contains(search)
+                    }
+                    androidx.compose.foundation.lazy.LazyColumn {
+                        items(filtered, key = { it.isoCode }) { c ->
+                            val isSel = c.isoCode == selectedCountry.isoCode
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (isSel) Color(0xFFE10600).copy(0.15f) else Color.Transparent)
+                                    .clickable {
+                                        onCountrySelected(c)
+                                        expanded = false
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text(c.flag, fontSize = 22.sp)
+                                Text(
+                                    c.name,
+                                    color = if (isSel) Color(0xFFE10600) else Color.White,
+                                    fontSize = 14.sp,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(c.dialCode, color = Color.Gray, fontSize = 13.sp)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -242,3 +434,6 @@ fun AuthTextField(
         singleLine = true
     )
 }
+
+
+

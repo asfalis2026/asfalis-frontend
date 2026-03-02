@@ -28,20 +28,33 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.yourname.womensafety.R
+import com.yourname.womensafety.ui.viewmodels.DashboardViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(navController: NavController) {
-    var isProtectionOn by remember { mutableStateOf(false) }
+    val dashboardViewModel: DashboardViewModel = viewModel(
+        factory = DashboardViewModel.Factory
+    )
+    val isProtectionOn by dashboardViewModel.isProtectionActive.collectAsStateWithLifecycle()
+    val userName by dashboardViewModel.userName.collectAsStateWithLifecycle()
     var isBraceletConnected by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        dashboardViewModel.loadProtectionStatus()
+        dashboardViewModel.loadGreeting()
+    }
 
     var showSearchSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
+    val errorMessage by dashboardViewModel.errorMessage.collectAsStateWithLifecycle()
 
     val haptic = LocalHapticFeedback.current
     val infiniteTransition = rememberInfiniteTransition(label = "dashboard_anims")
@@ -95,18 +108,25 @@ fun DashboardScreen(navController: NavController) {
                             fontWeight = FontWeight.Black,
                             letterSpacing = 1.sp
                         )
-                        Text("Active Protection", color = Color(0xFFE10600), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (userName != null) "Hello, $userName" else "Active Protection",
+                            color = Color(0xFFE10600),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
 
-                // PNG Logo replaces Help Icon
-                Image(
-                    painter = painterResource(id = R.drawable.splash_logo),
-                    contentDescription = "App Logo",
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // PNG Logo
+                    Image(
+                        painter = painterResource(id = R.drawable.splash_logo),
+                        contentDescription = "App Logo",
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                    )
+                }
             }
 
             Spacer(Modifier.weight(0.6f))
@@ -124,7 +144,7 @@ fun DashboardScreen(navController: NavController) {
                         }
                     }.padding(12.dp).clip(CircleShape).background(if (isProtectionOn) Color(0xFFE10600).copy(0.15f) else Color.White.copy(0.05f))
                         .border(width = 1.dp, color = if (isProtectionOn) Color(0xFFE10600).copy(0.3f) else Color.White.copy(0.1f), shape = CircleShape)
-                        .clickable { haptic.performHapticFeedback(HapticFeedbackType.LongPress); isProtectionOn = !isProtectionOn },
+                        .clickable { haptic.performHapticFeedback(HapticFeedbackType.LongPress); dashboardViewModel.toggleProtection(!isProtectionOn) },
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {

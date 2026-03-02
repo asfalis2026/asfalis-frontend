@@ -1,0 +1,26 @@
+package com.yourname.womensafety.data.network.api
+
+import com.yourname.womensafety.data.network.dto.*
+import retrofit2.Response
+import retrofit2.http.*
+
+interface SosApiService {
+
+    @POST("sos/trigger")
+    suspend fun triggerSos(
+        @Body request: SosTriggerRequest
+    ): Response<ApiResponse<SosAlertData>>
+
+    @POST("sos/send-now")
+    suspend fun sendSosNow(
+        @Body request: SosSendNowRequest
+    ): Response<ApiResponse<SosAlertData>>
+
+    @POST("sos/cancel")
+    suspend fun cancelSos(
+        @Body request: SosCancelRequest
+    ): Response<ApiResponse<Unit>>
+
+    @GET("sos/history")
+    suspend fun getSosHistory(): Response<ApiResponse<List<SosHistoryItem>>>
+}

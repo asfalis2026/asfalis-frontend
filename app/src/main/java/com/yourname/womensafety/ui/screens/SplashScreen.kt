@@ -1,6 +1,5 @@
 package com.yourname.womensafety.ui.screens
 
-import android.content.Context
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -13,63 +12,34 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.yourname.womensafety.R
+import com.yourname.womensafety.ui.viewmodels.SplashViewModel
 import kotlinx.coroutines.delay
 
 @Composable
 fun AppSplashScreen(navController: NavController) {
-    val context = LocalContext.current
+    val splashViewModel: SplashViewModel = viewModel(factory = SplashViewModel.Factory)
+    val destination by splashViewModel.destination.collectAsState()
     val scale = remember { Animatable(0.85f) }
 
     LaunchedEffect(key1 = true) {
-        // 1. Logo Animation
-        scale.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(durationMillis = 800)
-        )
-
-        // 2. Branding Display Duration
+        // Logo animation
+        scale.animateTo(targetValue = 1f, animationSpec = tween(durationMillis = 800))
         delay(1600)
+        // Resolve navigation destination via ViewModel (DataStore + API)
+        splashViewModel.resolveStartDestination()
+    }
 
-        // 3. Load State Flags
-        val sharedPref = context.getSharedPreferences("raksha_prefs", Context.MODE_PRIVATE)
-        val isOnboardingComplete = sharedPref.getBoolean("onboarding_complete", false)
-        val arePermissionsGranted = sharedPref.getBoolean("permissions_granted", false)
-        val isUserLoggedIn = sharedPref.getBoolean("is_logged_in", false)
-
-        // 4. MASTER NAVIGATION LOGIC
-        // We check these in order of a new user's journey.
-        when {
-            // Journey Start: Needs to see Get Started
-            !isOnboardingComplete -> {
-                navController.navigate("onboarding") {
-                    popUpTo(0) { inclusive = true }
-                }
-            }
-            // Journey Step 2: Needs to grant permissions
-            !arePermissionsGranted -> {
-                navController.navigate("permissions") {
-                    popUpTo(0) { inclusive = true }
-                }
-            }
-            // Journey Complete: User is fully verified
-            isUserLoggedIn -> {
-                navController.navigate("dashboard") {
-                    popUpTo(0) { inclusive = true }
-                }
-            }
-            // Journey Step 3: Seen intro and permissions, but needs to Login
-            else -> {
-                navController.navigate("login") {
-                    popUpTo(0) { inclusive = true }
-                }
-            }
+    // Navigate once destination is resolved
+    LaunchedEffect(destination.route) {
+        destination.route?.let { route ->
+            navController.navigate(route) { popUpTo(0) { inclusive = true } }
         }
     }
 
@@ -77,9 +47,7 @@ fun AppSplashScreen(navController: NavController) {
         modifier = Modifier
             .fillMaxSize()
             .background(
-                Brush.verticalGradient(
-                    listOf(Color.Black, Color(0xFF1A0000), Color.Black)
-                )
+                Brush.verticalGradient(listOf(Color.Black, Color(0xFF1A0000), Color.Black))
             ),
         contentAlignment = Alignment.Center
     ) {

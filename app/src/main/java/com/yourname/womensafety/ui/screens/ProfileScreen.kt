@@ -1,6 +1,5 @@
 package com.yourname.womensafety.ui.screens
 
-import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,18 +20,64 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.yourname.womensafety.ui.viewmodels.ProfileUiState
+import com.yourname.womensafety.ui.viewmodels.ProfileViewModel
 
 @Composable
 fun ProfileScreen(navController: NavController) {
     var showLogoutDialog by remember { mutableStateOf(false) }
-    val context = LocalContext.current
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var isDeletingAccount by remember { mutableStateOf(false) }
+
+    val profileViewModel: ProfileViewModel = viewModel(
+        factory = ProfileViewModel.Factory
+    )
+    val uiState by profileViewModel.profileState.collectAsStateWithLifecycle()
+    val deleteError by profileViewModel.updateError.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        profileViewModel.loadProfile()
+    }
+
+    // Reset spinner and surface error when deleteAccount() fails
+    LaunchedEffect(deleteError) {
+        if (deleteError != null) {
+            isDeletingAccount = false
+        }
+    }
+
+    // Navigate to login on logout or account deletion
+    LaunchedEffect(uiState) {
+        when (uiState) {
+            is ProfileUiState.LoggedOut,
+            is ProfileUiState.AccountDeleted -> {
+                navController.navigate("login") { popUpTo(0) { inclusive = true } }
+            }
+            else -> Unit
+        }
+    }
+
+    val displayName = when (val s = uiState) {
+        is ProfileUiState.Success -> s.profile.fullName
+        else -> "Loading..."
+    }
+    val displayPhone = when (val s = uiState) {
+        is ProfileUiState.Success -> s.profile.phone ?: "Not set"
+        else -> ""
+    }
+    val initials = displayName.split(" ")
+        .filter { it.isNotBlank() }
+        .take(2)
+        .joinToString("") { it.first().uppercaseChar().toString() }
+        .ifEmpty { "?" }
+
     val backgroundGradient = Brush.verticalGradient(
         colors = listOf(Color.Black, Color(0xFF1A0000), Color(0xFF2D0000))
     )
@@ -62,19 +107,31 @@ fun ProfileScreen(navController: NavController) {
             Spacer(Modifier.height(32.dp))
 
             // --- Profile Identity Section ---
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier.size(70.dp).clip(CircleShape).background(
-                        Brush.linearGradient(listOf(Color(0xFFE10600), Color(0xFF8B0000)))
-                    ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("JP", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            when (val s = uiState) {
+                is ProfileUiState.Loading -> {
+                    Box(modifier = Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Color(0xFFE10600), modifier = Modifier.size(32.dp))
+                    }
                 }
-                Spacer(Modifier.width(16.dp))
-                Column {
-                    Text("Jessica Parker", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                    Text("jessica.parker@email.com", color = Color.Gray, fontSize = 14.sp)
+                is ProfileUiState.Error -> {
+                    Text(s.message, color = Color(0xFFE10600), fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
+                }
+                else -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier.size(70.dp).clip(CircleShape).background(
+                                Brush.linearGradient(listOf(Color(0xFFE10600), Color(0xFF8B0000)))
+                            ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(initials, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        Column {
+                            Text(displayName, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                            Text(displayPhone, color = Color.Gray, fontSize = 14.sp)
+                        }
+                    }
                 }
             }
 
@@ -84,7 +141,6 @@ fun ProfileScreen(navController: NavController) {
             Text("Settings & Customization", color = Color(0xFFE10600), fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
             Spacer(Modifier.height(12.dp))
 
-            // NEW: The Settings Button
             Surface(
                 onClick = { navController.navigate("settings") },
                 color = Color.White.copy(0.05f),
@@ -120,9 +176,9 @@ fun ProfileScreen(navController: NavController) {
                     .background(Color.White.copy(0.03f))
                     .border(1.dp, Color.White.copy(0.05f), RoundedCornerShape(20.dp))
             ) {
-                InfoRowCompact("Phone", "+1 (555) 123-4567")
+                InfoRowCompact("Phone", displayPhone)
                 HorizontalDivider(color = Color.White.copy(0.05f))
-                InfoRowCompact("Emergency Contact", "+1 (911) 000-0000")
+                InfoRowCompact("Country", if (uiState is ProfileUiState.Success) (uiState as ProfileUiState.Success).profile.country ?: "Not set" else "")
             }
 
             Spacer(Modifier.height(32.dp))
@@ -152,7 +208,7 @@ fun ProfileScreen(navController: NavController) {
                 }
 
                 Button(
-                    onClick = { /* Handle Delete */ },
+                    onClick = { showDeleteDialog = true },
                     modifier = Modifier.weight(1f).height(54.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
                     shape = RoundedCornerShape(16.dp),
@@ -165,25 +221,118 @@ fun ProfileScreen(navController: NavController) {
             Spacer(Modifier.height(120.dp))
         }
 
-        // --- Logout Dialog (Keep your existing working logic) ---
+        // --- Logout Dialog ---
         if (showLogoutDialog) {
             Dialog(onDismissRequest = { showLogoutDialog = false }) {
                 Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(0.8f)), contentAlignment = Alignment.Center) {
                     Column(modifier = Modifier.width(320.dp).clip(RoundedCornerShape(24.dp)).background(Color(0xFF0F0F0F)).padding(24.dp)) {
-                        Text("Confirm Logout", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(8.dp))
-                        Text("Are you sure you want to log out?", color = Color.Gray)
-                        Spacer(Modifier.height(32.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Logout, null, tint = Color.White, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text("Sign Out", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Text("Are you sure you want to sign out?", color = Color.Gray, fontSize = 14.sp)
+                        Spacer(Modifier.height(28.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Button(onClick = { showLogoutDialog = false }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(0.1f))) {
-                                Text("No")
-                            }
-                            Button(onClick = {
-                                val sharedPref = context.getSharedPreferences("raksha_prefs", Context.MODE_PRIVATE)
-                                sharedPref.edit().putBoolean("is_logged_in", false).apply()
-                                navController.navigate("login") { popUpTo(0) { inclusive = true } }
-                            }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE10600))) {
-                                Text("Logout")
+                            Button(
+                                onClick = { showLogoutDialog = false },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(0.1f))
+                            ) { Text("Cancel", color = Color.White) }
+                            Button(
+                                onClick = {
+                                    showLogoutDialog = false
+                                    profileViewModel.logout()
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE10600))
+                            ) { Text("Sign Out", color = Color.White) }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- Delete Account Dialog ---
+        if (showDeleteDialog) {
+            Dialog(onDismissRequest = {
+                if (!isDeletingAccount) {
+                    showDeleteDialog = false
+                    profileViewModel.clearUpdateError()
+                }
+            }) {
+                Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(0.85f)), contentAlignment = Alignment.Center) {
+                    Column(
+                        modifier = Modifier
+                            .width(320.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(Color(0xFF0F0F0F))
+                            .border(1.dp, Color(0xFFE10600).copy(0.3f), RoundedCornerShape(24.dp))
+                            .padding(24.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Warning, null,
+                                tint = Color(0xFFE10600),
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text("Delete Account", color = Color(0xFFE10600), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "This will permanently delete your account and all associated data including trusted contacts and SOS history.",
+                            color = Color.Gray,
+                            fontSize = 13.sp,
+                            lineHeight = 19.sp
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "This action cannot be undone.",
+                            color = Color(0xFFE10600),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (deleteError != null) {
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                deleteError!!,
+                                color = Color(0xFFFF6B6B),
+                                fontSize = 12.sp,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        Spacer(Modifier.height(28.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Button(
+                                onClick = {
+                                    showDeleteDialog = false
+                                    profileViewModel.clearUpdateError()
+                                },
+                                enabled = !isDeletingAccount,
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(0.1f))
+                            ) { Text("Cancel", color = Color.White) }
+                            Button(
+                                onClick = {
+                                    isDeletingAccount = true
+                                    profileViewModel.deleteAccount()
+                                },
+                                enabled = !isDeletingAccount,
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE10600)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                if (isDeletingAccount) {
+                                    CircularProgressIndicator(
+                                        color = Color.White,
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Text("Delete", color = Color.White, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }

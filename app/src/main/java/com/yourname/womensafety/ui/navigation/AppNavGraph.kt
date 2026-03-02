@@ -22,6 +22,8 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
+import com.yourname.womensafety.data.SessionManager
+import com.yourname.womensafety.data.network.RetrofitClient
 import com.yourname.womensafety.ui.screens.*
 
 @Composable
@@ -30,6 +32,64 @@ fun AppNavGraph() {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val haptic = LocalHapticFeedback.current
+
+    // Sticky session-expired flag from SessionManager
+    val sessionExpired by SessionManager.sessionExpired.collectAsState()
+    var showSessionExpiredDialog by remember { mutableStateOf(false) }
+
+    // Watch for session expiry. Never interrupt an active SOS — the flag stays true
+    // and the dialog will appear once the user navigates away from the SOS screen.
+    LaunchedEffect(sessionExpired, currentRoute) {
+        val safeToShow = currentRoute != null
+            && currentRoute != "sos_alert"
+            && currentRoute != "login"
+            && currentRoute != "app_splash"
+            && currentRoute != "onboarding"
+            && currentRoute != "permissions"
+        if (sessionExpired && safeToShow) {
+            showSessionExpiredDialog = true
+        }
+    }
+
+    // Session-expired dialog — non-dismissable, explains what happened
+    if (showSessionExpiredDialog) {
+        AlertDialog(
+            onDismissRequest = { /* non-dismissable to prevent confusion */ },
+            containerColor = Color(0xFF1A1A1A),
+            shape = RoundedCornerShape(16.dp),
+            title = {
+                Text(
+                    text = "Session Expired",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "Your login session has expired. Please log in again to continue.",
+                    color = Color(0xFFAAAAAA)
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showSessionExpiredDialog = false
+                        SessionManager.clearExpiry()
+                        RetrofitClient.reset()
+                        navController.navigate("login") {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                ) {
+                    Text(
+                        text = "Log In",
+                        color = Color(0xFFE10600),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        )
+    }
 
     val bottomBarScreens = listOf("dashboard", "sos_history", "contacts", "profile")
 
@@ -124,11 +184,18 @@ fun AppNavGraph() {
                 composable("permissions") { PermissionsScreen(navController) }
                 composable("login") { LoginScreen(navController) }
                 composable(
-                    route = "verify_otp/{email}",
-                    arguments = listOf(navArgument("email") { type = NavType.StringType })
+                    route = "verify_otp/{phone}",
+                    arguments = listOf(navArgument("phone") { type = NavType.StringType })
                 ) { backStackEntry ->
-                    val email = backStackEntry.arguments?.getString("email") ?: ""
-                    VerifyOTPScreen(navController, email)
+                    val phone = backStackEntry.arguments?.getString("phone") ?: ""
+                    VerifyOTPScreen(navController, phone)
+                }
+                composable(
+                    route = "reset_password/{phone}",
+                    arguments = listOf(navArgument("phone") { type = NavType.StringType })
+                ) { backStackEntry ->
+                    val phone = backStackEntry.arguments?.getString("phone") ?: ""
+                    ResetPasswordScreen(navController, phone)
                 }
                 composable("dashboard") { DashboardScreen(navController) }
                 composable("sos_history") { SOSHistoryScreen(navController) }
@@ -144,6 +211,9 @@ fun AppNavGraph() {
                             popUpTo("dashboard") { inclusive = true }
                         }
                     })
+                }
+                composable("live_map") {
+                    LiveMapScreen(onBack = { navController.popBackStack() })
                 }
             }
         }

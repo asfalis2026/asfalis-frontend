@@ -1,7 +1,6 @@
 package com.yourname.womensafety.ui.screens
 
 import android.Manifest
-import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -10,41 +9,38 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.LocationOn
-import androidx.compose.material.icons.outlined.Message
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.yourname.womensafety.data.AppServiceLocator
+import kotlinx.coroutines.launch
 
 @Composable
 fun PermissionsScreen(navController: NavController) {
     val haptic = LocalHapticFeedback.current
-    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     // --- UPDATED NAVIGATION LOGIC ---
-    // This function now strictly moves the user to the LOGIN screen.
     fun navigateToLogin() {
-        val sharedPref = context.getSharedPreferences("raksha_prefs", Context.MODE_PRIVATE)
-
-        // 1. Mark permissions as "handled" so Splash skips this next time
-        sharedPref.edit().putBoolean("permissions_granted", true).apply()
-
-        // 2. ALWAYS go to login (Never skip to Dashboard from here)
+        scope.launch {
+            // Mark permissions as handled so SplashViewModel DataStore flag is set
+            AppServiceLocator.tokenManager.setPermissionsGranted()
+        }
+        // ALWAYS go to login — never skip to Dashboard from here
         navController.navigate("login") {
-            // Clear the permission screen from the backstack
             popUpTo("permissions") { inclusive = true }
         }
     }
@@ -115,11 +111,6 @@ fun PermissionsScreen(navController: NavController) {
             desc = "To share your live coordinates with emergency contacts."
         )
         PermissionItem(
-            icon = Icons.Outlined.Message,
-            title = "SMS Permission",
-            desc = "To automatically send emergency alerts without internet."
-        )
-        PermissionItem(
             icon = Icons.Outlined.NotificationsActive,
             title = "Critical Alerts",
             desc = "To ensure SOS sounds are heard even in silent mode."
@@ -134,8 +125,7 @@ fun PermissionsScreen(navController: NavController) {
                 permissionLauncher.launch(
                     arrayOf(
                         Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.ACCESS_COARSE_LOCATION,
-                        Manifest.permission.SEND_SMS
+                        Manifest.permission.ACCESS_COARSE_LOCATION
                     )
                 )
             },
