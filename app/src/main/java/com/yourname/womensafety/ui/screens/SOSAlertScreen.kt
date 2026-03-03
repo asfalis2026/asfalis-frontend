@@ -1,6 +1,7 @@
 package com.yourname.womensafety.ui.screens
 
 import android.location.Location
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -32,11 +34,18 @@ import kotlin.coroutines.resume
 
 @Suppress("MissingPermission")
 @Composable
-fun SOSAlertScreen(onSafe: () -> Unit) {
+fun SOSAlertScreen(
+    triggerType: String = "manual",
+    onSafe: () -> Unit
+) {
     val context = LocalContext.current
     val sosViewModel: SosViewModel = viewModel(factory = SosViewModel.Factory)
     val uiState by sosViewModel.uiState.collectAsState()
     var ticks by remember { mutableIntStateOf(10) }
+    var pendingHomeNavigation by remember { mutableStateOf(false) }
+
+    // Determine if this is an automatic trigger
+    val isAutomatic = triggerType != "manual"
 
     // Trigger SOS with real GPS coordinates
     LaunchedEffect(Unit) {
@@ -50,7 +59,8 @@ fun SOSAlertScreen(onSafe: () -> Unit) {
         } catch (e: SecurityException) { null }
         sosViewModel.triggerSos(
             latitude = location?.latitude ?: 0.0,
-            longitude = location?.longitude ?: 0.0
+            longitude = location?.longitude ?: 0.0,
+            triggerType = triggerType
         )
     }
 
@@ -60,8 +70,52 @@ fun SOSAlertScreen(onSafe: () -> Unit) {
             delay(1000L)
             ticks--
         }
-        if (!uiState.isCancelled) {
+        if (!uiState.isCancelled && !uiState.isSent && !uiState.isSending) {
             sosViewModel.sendNow()
+        }
+    }
+
+    fun handleBackToHome() {
+        val isActiveAndUnsent = !uiState.isCancelled && !uiState.isSent && !uiState.isSending
+        val shouldSendBeforeLeaving = isActiveAndUnsent && uiState.alertId != null
+
+        if (shouldSendBeforeLeaving) {
+            pendingHomeNavigation = true
+            sosViewModel.sendNow()
+        } else if (isActiveAndUnsent && uiState.alertId == null) {
+            // Trigger request is still in-flight. Wait for alertId, then dispatch before leaving.
+            pendingHomeNavigation = true
+        } else {
+            onSafe()
+        }
+    }
+
+    BackHandler(onBack = { handleBackToHome() })
+
+    // If user chose to go home during active alert, wait for send completion then navigate.
+    LaunchedEffect(pendingHomeNavigation, uiState.isSent) {
+        if (pendingHomeNavigation && uiState.isSent) {
+            pendingHomeNavigation = false
+            onSafe()
+        }
+    }
+
+    // If Home was requested before alert creation completed, dispatch as soon as alertId becomes available.
+    LaunchedEffect(pendingHomeNavigation, uiState.alertId, uiState.isSent, uiState.isCancelled, uiState.isSending) {
+        if (pendingHomeNavigation
+            && uiState.alertId != null
+            && !uiState.isSent
+            && !uiState.isCancelled
+            && !uiState.isSending
+        ) {
+            sosViewModel.sendNow()
+        }
+    }
+
+    // Stop pending navigation if send failed.
+    LaunchedEffect(pendingHomeNavigation, uiState.errorMessage) {
+        if (pendingHomeNavigation && uiState.errorMessage != null) {
+            pendingHomeNavigation = false
         }
     }
 
@@ -85,6 +139,21 @@ fun SOSAlertScreen(onSafe: () -> Unit) {
                 )
             )
     ) {
+        // --- BACK TO HOME BUTTON (TOP LEFT) ---
+        IconButton(
+            onClick = { handleBackToHome() },
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = "Back to Home",
+                tint = Color.White.copy(0.8f),
+                modifier = Modifier.size(28.dp)
+            )
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -119,7 +188,7 @@ fun SOSAlertScreen(onSafe: () -> Unit) {
             )
 
             Text(
-                text = "Unusual Movement Detected",
+                text = if (isAutomatic) "Unusual Movement Detected" else "Emergency SOS Triggered",
                 color = Color.Red.copy(0.9f),
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -127,7 +196,10 @@ fun SOSAlertScreen(onSafe: () -> Unit) {
             )
 
             Text(
-                text = "A sudden impact or fall was detected by\nyour device sensors.",
+                text = if (isAutomatic) 
+                    "A sudden impact or fall was detected by\nyour device sensors."
+                else
+                    "You have manually triggered an\nemergency SOS alert.",
                 color = Color.Gray,
                 fontSize = 13.sp,
                 textAlign = TextAlign.Center,
@@ -166,8 +238,17 @@ fun SOSAlertScreen(onSafe: () -> Unit) {
             Spacer(modifier = Modifier.height(30.dp))
 
             Text(
-                text = if (uiState.isSent) "SOS Dispatched!" else "Sending Auto-SOS...",
-                color = if (uiState.isSent) Color(0xFF00E676) else Color.White.copy(0.6f),
+                text = when {
+                    uiState.isCancelled -> "False Alarm - Alert Cancelled"
+                    uiState.isSent -> "SOS Dispatched!"
+                    uiState.isSending || pendingHomeNavigation || ticks == 0 -> "Dispatching SOS..."
+                    else -> "SOS Pending..."
+                },
+                color = when {
+                    uiState.isCancelled -> Color(0xFF4CAF50)
+                    uiState.isSent -> Color(0xFF00E676)
+                    else -> Color.White.copy(0.7f)
+                },
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium
             )
@@ -177,7 +258,7 @@ fun SOSAlertScreen(onSafe: () -> Unit) {
             // --- I'M SAFE BUTTON ---
             Button(
                 onClick = { sosViewModel.cancelSos() },
-                enabled = !uiState.isSent,
+                enabled = !uiState.isCancelled,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(58.dp),
@@ -209,6 +290,21 @@ fun SOSAlertScreen(onSafe: () -> Unit) {
                 } else {
                     Text("SEND SOS NOW", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // --- BACK TO HOME BUTTON ---
+            OutlinedButton(
+                onClick = { handleBackToHome() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(16.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(0.25f)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+            ) {
+                Text("BACK TO HOME", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             }
 
             // Error

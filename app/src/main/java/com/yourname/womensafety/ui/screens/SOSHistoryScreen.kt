@@ -23,12 +23,20 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.yourname.womensafety.data.SecurityPolicyManager
 import com.yourname.womensafety.data.network.dto.SosHistoryItem
+import com.yourname.womensafety.ui.components.SecureScreen
 import com.yourname.womensafety.ui.viewmodels.SosHistoryUiState
 import com.yourname.womensafety.ui.viewmodels.SosHistoryViewModel
 
 @Composable
 fun SOSHistoryScreen(navController: NavController) {
+    val securityPolicy by SecurityPolicyManager.state.collectAsState()
+    SecureScreen(
+        enabled = securityPolicy.screenshotProtectionEnabled &&
+            "sos_history" in securityPolicy.protectedScreens
+    )
+
     val historyViewModel: SosHistoryViewModel = viewModel(
         factory = SosHistoryViewModel.Factory
     )

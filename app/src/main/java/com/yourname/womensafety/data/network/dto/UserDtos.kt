@@ -36,3 +36,12 @@ data class SosMessageData(
 data class FcmTokenRequest(
     @SerializedName("fcm_token") val fcmToken: String
 )
+
+data class SecurityPolicyResponse(
+    @SerializedName("screenshot_protection") val screenshotProtection: ScreenshotProtectionPolicy
+)
+
+data class ScreenshotProtectionPolicy(
+    @SerializedName("enabled") val enabled: Boolean = false,
+    @SerializedName("protected_screens") val protectedScreens: List<String> = emptyList()
+)

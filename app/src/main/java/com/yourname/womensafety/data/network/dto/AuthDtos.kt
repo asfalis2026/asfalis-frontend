@@ -21,7 +21,14 @@ data class VerifyPhoneOtpRequest(
 /** POST /auth/login/phone */
 data class PhoneLoginRequest(
     @SerializedName("phone_number") val phoneNumber: String,
-    @SerializedName("password") val password: String
+    @SerializedName("password") val password: String,
+    @SerializedName("device_imei") val deviceImei: String? = null,
+    @SerializedName("confirm_handover") val confirmHandover: Boolean = false
+)
+
+data class HandsetChangeStatusRequest(
+    @SerializedName("phone_number") val phoneNumber: String,
+    @SerializedName("device_imei") val deviceImei: String
 )
 
 /** POST /auth/resend-otp  (phone_number key) */
@@ -94,4 +101,13 @@ data class LogoutRequest(
 data class ValidateData(
     @SerializedName("user_id") val userId: String,
     @SerializedName("is_valid") val isValid: Boolean
+)
+
+data class HandsetChangeStatusData(
+    @SerializedName("has_pending_request") val hasPendingRequest: Boolean = false,
+    @SerializedName("request_id") val requestId: String? = null,
+    @SerializedName("status") val status: String? = null,
+    @SerializedName("eligible_at") val eligibleAt: String? = null,
+    @SerializedName("remaining_seconds") val remainingSeconds: Int? = null,
+    @SerializedName("confirm_handover_required") val confirmHandoverRequired: Boolean = false
 )

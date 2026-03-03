@@ -26,6 +26,10 @@ class SosRepository(
         return safeApiCall { sosApi.cancelSos(SosCancelRequest(alertId)) }
     }
 
+    suspend fun markUserSafe(alertId: String): NetworkResult<Unit> {
+        return safeApiCall { sosApi.markUserSafe(SosSafeRequest(alertId)) }
+    }
+
     suspend fun getSosHistory(): NetworkResult<List<SosHistoryItem>> {
         return safeApiCall { sosApi.getSosHistory() }
     }

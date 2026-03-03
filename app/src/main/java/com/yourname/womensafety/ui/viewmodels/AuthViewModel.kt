@@ -4,12 +4,23 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.yourname.womensafety.data.AppServiceLocator
+import com.yourname.womensafety.data.SecurityPolicyManager
+import com.yourname.womensafety.data.network.dto.HandsetChangeStatusData
 import com.yourname.womensafety.data.repository.AuthRepository
 import com.yourname.womensafety.data.repository.NetworkResult
+import com.yourname.womensafety.data.repository.UserRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+data class HandsetTransferUiState(
+    val phoneNumber: String,
+    val requestId: String? = null,
+    val eligibleAt: String? = null,
+    val remainingSeconds: Int? = null,
+    val confirmHandoverRequired: Boolean = false
+)
 
 data class AuthUiState(
     val isLoading: Boolean = false,
@@ -22,11 +33,13 @@ data class AuthUiState(
     val forgotPasswordSent: String? = null,
     /** True after resendOtp succeeds — Twilio re-sent the SMS; show a toast. */
     val otpResent: Boolean = false,
+    val handsetTransfer: HandsetTransferUiState? = null,
     val errorMessage: String? = null
 )
 
 class AuthViewModel(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val userRepository: UserRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AuthUiState())
@@ -37,11 +50,20 @@ class AuthViewModel(
         viewModelScope.launch {
             _uiState.value = AuthUiState(isLoading = true)
             when (val result = authRepository.loginWithPhone(phoneNumber, password)) {
-                is NetworkResult.Success -> _uiState.value = AuthUiState(isSuccess = true)
+                is NetworkResult.Success -> {
+                    fetchSecurityPolicy()
+                    _uiState.value = AuthUiState(isSuccess = true)
+                }
                 is NetworkResult.Error -> {
                     // If phone not verified, surface the phone number so UI navigates to OTP
                     if (result.code == "PHONE_NOT_VERIFIED") {
                         _uiState.value = AuthUiState(unverifiedPhone = phoneNumber)
+                    } else if (
+                        result.code == "HANDSET_CHANGE_PENDING" ||
+                        result.code == "HANDSET_CHANGE_CONFIRMATION_REQUIRED"
+                    ) {
+                        val transferState = loadHandsetTransferState(phoneNumber, pendingCode = result.code)
+                        _uiState.value = AuthUiState(handsetTransfer = transferState)
                     } else {
                         val friendlyMessage = when (result.code) {
                             "PHONE_NOT_VERIFIED" -> "Please verify your phone number first."
@@ -85,7 +107,10 @@ class AuthViewModel(
         viewModelScope.launch {
             _uiState.value = AuthUiState(isLoading = true)
             when (val result = authRepository.verifyPhoneOtp(phoneNumber, otpCode)) {
-                is NetworkResult.Success -> _uiState.value = AuthUiState(isSuccess = true)
+                is NetworkResult.Success -> {
+                    fetchSecurityPolicy()
+                    _uiState.value = AuthUiState(isSuccess = true)
+                }
                 is NetworkResult.Error -> {
                     val friendlyMessage = when (result.code) {
                         "OTP_INVALID"      -> "Incorrect or expired OTP. Try again."
@@ -170,11 +195,76 @@ class AuthViewModel(
         )
     }
 
+    fun clearHandsetTransferState() {
+        _uiState.value = _uiState.value.copy(handsetTransfer = null)
+    }
+
+    fun confirmHandsetTransfer(phoneNumber: String, password: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
+            when (val result = authRepository.loginWithPhone(phoneNumber, password, confirmHandover = true)) {
+                is NetworkResult.Success -> {
+                    fetchSecurityPolicy()
+                    _uiState.value = AuthUiState(isSuccess = true)
+                }
+                is NetworkResult.Error -> {
+                    if (result.code == "HANDSET_CHANGE_PENDING" || result.code == "HANDSET_CHANGE_CONFIRMATION_REQUIRED") {
+                        val transferState = loadHandsetTransferState(phoneNumber, pendingCode = result.code)
+                        _uiState.value = AuthUiState(handsetTransfer = transferState)
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            errorMessage = result.message
+                        )
+                    }
+                }
+                is NetworkResult.Loading -> Unit
+            }
+        }
+    }
+
+    private suspend fun loadHandsetTransferState(
+        phoneNumber: String,
+        pendingCode: String
+    ): HandsetTransferUiState {
+        val statusResult = authRepository.getHandsetChangeStatus(phoneNumber)
+        return if (statusResult is NetworkResult.Success) {
+            val data = statusResult.data
+            HandsetTransferUiState(
+                phoneNumber = phoneNumber,
+                requestId = data.requestId,
+                eligibleAt = data.eligibleAt,
+                remainingSeconds = data.remainingSeconds,
+                confirmHandoverRequired = data.confirmHandoverRequired || pendingCode == "HANDSET_CHANGE_CONFIRMATION_REQUIRED"
+            )
+        } else {
+            HandsetTransferUiState(
+                phoneNumber = phoneNumber,
+                confirmHandoverRequired = pendingCode == "HANDSET_CHANGE_CONFIRMATION_REQUIRED"
+            )
+        }
+    }
+
+    private suspend fun fetchSecurityPolicy() {
+        when (val result = userRepository.getSecurityPolicy()) {
+            is NetworkResult.Success -> {
+                SecurityPolicyManager.update(
+                    enabled = result.data.screenshotProtection.enabled,
+                    protectedScreens = result.data.screenshotProtection.protectedScreens
+                )
+            }
+            else -> Unit
+        }
+    }
+
     companion object {
         val Factory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return AuthViewModel(AppServiceLocator.authRepository) as T
+                return AuthViewModel(
+                    authRepository = AppServiceLocator.authRepository,
+                    userRepository = AppServiceLocator.userRepository
+                ) as T
             }
         }
     }

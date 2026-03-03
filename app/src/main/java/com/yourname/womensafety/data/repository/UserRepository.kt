@@ -36,6 +36,10 @@ class UserRepository(
         return safeApiCall { userApi.updateFcmToken(FcmTokenRequest(fcmToken)) }
     }
 
+    suspend fun getSecurityPolicy(): NetworkResult<SecurityPolicyResponse> {
+        return safeApiCall { userApi.getSecurityPolicy() }
+    }
+
     suspend fun deleteAccount(): NetworkResult<Unit> {
         return safeApiCall { userApi.deleteAccount() }
     }

@@ -199,18 +199,56 @@ fun AppNavGraph() {
                 }
                 composable("dashboard") { DashboardScreen(navController) }
                 composable("sos_history") { SOSHistoryScreen(navController) }
-                composable("contacts") { TrustedContactsScreen(onBack = { navController.popBackStack() }) }
+                composable("contacts") { TrustedContactsScreen(navController) }
+                composable(
+                    route = "contact_otp_verification/{contactId}/{phone}/{name}/{expiresInSeconds}",
+                    arguments = listOf(
+                        navArgument("contactId") { type = NavType.StringType },
+                        navArgument("phone") { type = NavType.StringType },
+                        navArgument("name") { type = NavType.StringType },
+                        navArgument("expiresInSeconds") { type = NavType.IntType }
+                    )
+                ) { backStackEntry ->
+                    val contactId = backStackEntry.arguments?.getString("contactId") ?: ""
+                    val phone = backStackEntry.arguments?.getString("phone") ?: ""
+                    val name = backStackEntry.arguments?.getString("name") ?: ""
+                    val expiresInSeconds = backStackEntry.arguments?.getInt("expiresInSeconds") ?: 300
+                    ContactOtpVerificationScreen(
+                        contactId = contactId,
+                        phone = phone,
+                        name = name,
+                        initialExpiresInSeconds = expiresInSeconds,
+                        onBack = { navController.popBackStack() },
+                        onVerificationSuccess = {
+                            navController.navigate("contacts") {
+                                popUpTo("contacts") { inclusive = true }
+                            }
+                        }
+                    )
+                }
                 composable("profile") { ProfileScreen(navController) }
                 composable("settings") { SettingsScreen(navController) }
                 composable("privacy_policy") { PrivacyPolicyScreen(navController) }
                 composable("help") { HelpSupportScreen(navController) }
                 composable("about") { AboutAppScreen(navController) }
-                composable("sos_alert") {
-                    SOSAlertScreen(onSafe = {
-                        navController.navigate("dashboard") {
-                            popUpTo("dashboard") { inclusive = true }
+                composable(
+                    route = "sos_alert?triggerType={triggerType}",
+                    arguments = listOf(
+                        navArgument("triggerType") {
+                            type = NavType.StringType
+                            defaultValue = "manual"
                         }
-                    })
+                    )
+                ) { backStackEntry ->
+                    val triggerType = backStackEntry.arguments?.getString("triggerType") ?: "manual"
+                    SOSAlertScreen(
+                        triggerType = triggerType,
+                        onSafe = {
+                            navController.navigate("dashboard") {
+                                popUpTo("dashboard") { inclusive = true }
+                            }
+                        }
+                    )
                 }
                 composable("live_map") {
                     LiveMapScreen(onBack = { navController.popBackStack() })

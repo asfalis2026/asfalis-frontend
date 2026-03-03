@@ -10,9 +10,21 @@ class AuthRepository(
     private val tokenManager: TokenManager
 ) : BaseRepository() {
 
-    suspend fun loginWithPhone(phoneNumber: String, password: String): NetworkResult<AuthData> {
+    suspend fun loginWithPhone(
+        phoneNumber: String,
+        password: String,
+        confirmHandover: Boolean = false
+    ): NetworkResult<AuthData> {
+        val deviceImei = tokenManager.getOrCreateDeviceId()
         val result = safeApiCall {
-            authApi.loginWithPhone(PhoneLoginRequest(phoneNumber, password))
+            authApi.loginWithPhone(
+                PhoneLoginRequest(
+                    phoneNumber = phoneNumber,
+                    password = password,
+                    deviceImei = deviceImei,
+                    confirmHandover = confirmHandover
+                )
+            )
         }
         if (result is NetworkResult.Success) {
             tokenManager.saveTokens(
@@ -26,9 +38,21 @@ class AuthRepository(
         return result
     }
 
+    suspend fun getHandsetChangeStatus(phoneNumber: String): NetworkResult<HandsetChangeStatusData> {
+        val deviceImei = tokenManager.getOrCreateDeviceId()
+        return safeApiCall {
+            authApi.handsetChangeStatus(
+                HandsetChangeStatusRequest(
+                    phoneNumber = phoneNumber,
+                    deviceImei = deviceImei
+                )
+            )
+        }
+    }
+
     /**
-     * Step 1: Register with phone. Returns { phone_number, otp_code, expires_in }.
-     * The caller must send the SMS via SmsManager using the returned [PhoneRegisterData.otpCode].
+     * Step 1: Register with phone. Returns { phone_number, expires_in }.
+     * Twilio sends the OTP directly to the user's phone via SMS — the frontend does NOT send SMS.
      */
     suspend fun registerWithPhone(
         name: String, phoneNumber: String, password: String, country: String
@@ -57,7 +81,7 @@ class AuthRepository(
         return result
     }
 
-    /** Resend OTP — returns [ResendOtpData] with the new otp_code; caller sends the SMS. */
+    /** Resend OTP — Twilio re-sends the SMS to the user. Rate-limited 3×/15 min. */
     suspend fun resendOtp(phoneNumber: String): NetworkResult<ResendOtpData> {
         return safeApiCall { authApi.resendOtp(ResendOtpRequest(phoneNumber)) }
     }

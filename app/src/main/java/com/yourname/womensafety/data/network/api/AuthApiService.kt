@@ -25,6 +25,11 @@ interface AuthApiService {
         @Body request: PhoneLoginRequest
     ): Response<ApiResponse<AuthData>>
 
+    @POST("auth/handset-change/status")
+    suspend fun handsetChangeStatus(
+        @Body request: HandsetChangeStatusRequest
+    ): Response<ApiResponse<HandsetChangeStatusData>>
+
     /** Resend OTP — Twilio re-sends the SMS. Rate-limited 3×/15 min. */
     @POST("auth/resend-otp")
     suspend fun resendOtp(

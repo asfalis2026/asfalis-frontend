@@ -1,5 +1,6 @@
 package com.yourname.womensafety.data.network
 
+import android.os.Build
 import com.google.gson.Gson
 import com.yourname.womensafety.data.SessionManager
 import com.yourname.womensafety.data.local.TokenManager
@@ -19,10 +20,10 @@ class AuthInterceptor(
     private val refreshMutex = Mutex()
 
     private val publicPaths = listOf(
-        "auth/login", "auth/register", "auth/send-otp",
-        "auth/verify-otp", "auth/resend-otp", "auth/forgot-password", "auth/reset-password",
-        "auth/google", "auth/refresh", "auth/verify-email-otp",
-        "auth/verify-phone-otp", "auth/login/phone", "auth/login/email",
+        "auth/login", "auth/register",
+        "auth/resend-otp", "auth/forgot-password", "auth/reset-password",
+        "auth/google", "auth/refresh",
+        "auth/verify-phone-otp", "auth/login/phone",
         "health", "device/alert", "protection/train-model"
     )
 
@@ -38,11 +39,19 @@ class AuthInterceptor(
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
 
-        val isPublic = publicPaths.any { originalRequest.url.encodedPath.contains(it) }
-        if (isPublic) return chain.proceed(originalRequest)
+        val deviceId = runBlocking { tokenManager.getOrCreateDeviceId() }
+        val deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}".trim()
+
+        val baseRequest = originalRequest.newBuilder()
+            .header("X-Device-Id", deviceId)
+            .header("X-Device-Model", deviceModel)
+            .build()
+
+        val isPublic = publicPaths.any { baseRequest.url.encodedPath.contains(it) }
+        if (isPublic) return chain.proceed(baseRequest)
 
         // SOS trigger uses the long-lived sos_token, not the access_token
-        val isSosTrigger = originalRequest.url.encodedPath.contains("sos/trigger")
+        val isSosTrigger = baseRequest.url.encodedPath.contains("sos/trigger")
 
         // --- Proactive refresh: if access token expires within 60s, refresh now ---
         if (!isSosTrigger) {
@@ -71,9 +80,9 @@ class AuthInterceptor(
         }
 
         val authenticatedRequest = if (token != null) {
-            originalRequest.newBuilder().header("Authorization", "Bearer $token").build()
+            baseRequest.newBuilder().header("Authorization", "Bearer $token").build()
         } else {
-            originalRequest
+            baseRequest
         }
 
         val response = chain.proceed(authenticatedRequest)
@@ -121,13 +130,13 @@ class AuthInterceptor(
 
         return if (newToken != null) {
             chain.proceed(
-                originalRequest.newBuilder().header("Authorization", "Bearer $newToken").build()
+                baseRequest.newBuilder().header("Authorization", "Bearer $newToken").build()
             )
         } else {
             runBlocking { tokenManager.clearTokens() }
             SessionManager.onSessionExpired()
             // Return a synthetic 401 so the caller knows the request failed
-            chain.proceed(originalRequest)
+            chain.proceed(baseRequest)
         }
     }
 }

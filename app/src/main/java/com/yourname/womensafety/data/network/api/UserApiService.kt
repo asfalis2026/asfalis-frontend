@@ -6,6 +6,9 @@ import retrofit2.http.*
 
 interface UserApiService {
 
+    @GET("user/security-policy")
+    suspend fun getSecurityPolicy(): Response<ApiResponse<SecurityPolicyResponse>>
+
     @GET("user/profile")
     suspend fun getProfile(): Response<ApiResponse<UserProfile>>
 

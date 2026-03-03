@@ -203,7 +203,7 @@ fun DashboardScreen(navController: NavController) {
                     .height(110.dp)
                     .clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        navController.navigate("sos_alert")
+                        navController.navigate("sos_alert?triggerType=manual")
                     },
                 color = Color(0xFFE10600),
                 shape = RoundedCornerShape(24.dp),

@@ -12,7 +12,17 @@ interface ContactsApiService {
     @POST("contacts")
     suspend fun addContact(
         @Body request: AddContactRequest
+    ): Response<ApiResponse<AddContactResponse>>
+
+    @POST("contacts/verify-otp")
+    suspend fun verifyContactOtp(
+        @Body request: VerifyContactOtpRequest
     ): Response<ApiResponse<TrustedContact>>
+
+    @POST("contacts/resend-otp")
+    suspend fun resendContactOtp(
+        @Body request: ResendContactOtpRequest
+    ): Response<ApiResponse<ResendContactOtpResponse>>
 
     @PUT("contacts/{id}")
     suspend fun updateContact(

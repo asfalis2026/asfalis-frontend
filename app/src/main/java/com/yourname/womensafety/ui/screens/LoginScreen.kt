@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -261,7 +262,116 @@ fun LoginScreen(navController: NavController) {
                 }
             }
         }
+
+        uiState.handsetTransfer?.let { transferState ->
+            var remainingSeconds by remember(transferState.requestId, transferState.phoneNumber) {
+                mutableStateOf(transferState.remainingSeconds ?: 0)
+            }
+
+            LaunchedEffect(transferState.requestId, transferState.confirmHandoverRequired) {
+                if (!transferState.confirmHandoverRequired && remainingSeconds > 0) {
+                    while (remainingSeconds > 0) {
+                        delay(1000)
+                        remainingSeconds--
+                    }
+                }
+            }
+
+            val transferEnabled = transferState.confirmHandoverRequired || remainingSeconds <= 0
+
+            Dialog(onDismissRequest = { }) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color(0xFF1A0000),
+                    shape = RoundedCornerShape(20.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(0.12f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "Device Change Detected",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp
+                        )
+
+                        Text(
+                            text = if (transferEnabled)
+                                "Transfer window is open. You can move your account to this device now."
+                            else
+                                "Login on this new device is blocked for safety. You can transfer after the waiting period.",
+                            color = Color.Gray,
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp
+                        )
+
+                        if (!transferEnabled) {
+                            Text(
+                                text = "Time remaining: ${formatDuration(remainingSeconds)}",
+                                color = Color(0xFFE10600),
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp
+                            )
+                        }
+
+                        transferState.eligibleAt?.let {
+                            Text(
+                                text = "Eligible at: $it",
+                                color = Color.Gray,
+                                fontSize = 12.sp
+                            )
+                        }
+
+                        Button(
+                            onClick = {
+                                val fullPhone = selectedCountry.dialCode + phoneInput.trim()
+                                if (password.isBlank()) {
+                                    Toast.makeText(context, "Enter password to confirm transfer", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    authViewModel.confirmHandsetTransfer(fullPhone, password)
+                                }
+                            },
+                            enabled = transferEnabled && !uiState.isLoading,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE10600)),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Text(
+                                text = "Transfer account to this device",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = { authViewModel.clearHandsetTransferState() },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(0.2f)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                        ) {
+                            Text("Close")
+                        }
+                    }
+                }
+            }
+        }
     }
+}
+
+private fun formatDuration(totalSeconds: Int): String {
+    val safeSeconds = totalSeconds.coerceAtLeast(0)
+    val hours = safeSeconds / 3600
+    val minutes = (safeSeconds % 3600) / 60
+    val seconds = safeSeconds % 60
+    return String.format("%02d:%02d:%02d", hours, minutes, seconds)
 }
 
 /** Inline phone number row: country-code badge + digit-only input. */

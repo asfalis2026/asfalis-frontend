@@ -17,6 +17,10 @@ data class SosCancelRequest(
     @SerializedName("alert_id") val alertId: String
 )
 
+data class SosSafeRequest(
+    @SerializedName("alert_id") val alertId: String
+)
+
 data class SosAlertData(
     @SerializedName("alert_id") val alertId: String,
     @SerializedName("status") val status: String,

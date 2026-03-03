@@ -11,8 +11,16 @@ class ContactsRepository(
         return safeApiCall { contactsApi.getContacts() }
     }
 
-    suspend fun addContact(request: AddContactRequest): NetworkResult<TrustedContact> {
+    suspend fun addContact(request: AddContactRequest): NetworkResult<AddContactResponse> {
         return safeApiCall { contactsApi.addContact(request) }
+    }
+
+    suspend fun verifyContactOtp(request: VerifyContactOtpRequest): NetworkResult<TrustedContact> {
+        return safeApiCall { contactsApi.verifyContactOtp(request) }
+    }
+
+    suspend fun resendContactOtp(request: ResendContactOtpRequest): NetworkResult<ResendContactOtpResponse> {
+        return safeApiCall { contactsApi.resendContactOtp(request) }
     }
 
     suspend fun updateContact(

@@ -21,6 +21,11 @@ interface SosApiService {
         @Body request: SosCancelRequest
     ): Response<ApiResponse<Unit>>
 
+    @POST("sos/safe")
+    suspend fun markUserSafe(
+        @Body request: SosSafeRequest
+    ): Response<ApiResponse<Unit>>
+
     @GET("sos/history")
     suspend fun getSosHistory(): Response<ApiResponse<List<SosHistoryItem>>>
 }

@@ -2,6 +2,7 @@ package com.yourname.womensafety.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -29,7 +30,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
+import com.yourname.womensafety.data.SecurityPolicyManager
 import com.yourname.womensafety.data.network.dto.TrustedContact
+import com.yourname.womensafety.ui.components.SecureScreen
 import com.yourname.womensafety.ui.viewmodels.ContactsViewModel
 
 // ─── Country dial-code support ───────────────────────────────────────────────
@@ -111,15 +115,33 @@ val ALL_COUNTRIES: List<CountryDialCode> = listOf(
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-fun TrustedContactsScreen(onBack: () -> Unit) {
+fun TrustedContactsScreen(navController: NavController) {
+    val securityPolicy by SecurityPolicyManager.state.collectAsState()
+    SecureScreen(
+        enabled = securityPolicy.screenshotProtectionEnabled &&
+            "trusted_contacts" in securityPolicy.protectedScreens
+    )
+
     val contactsViewModel: ContactsViewModel = viewModel(
         factory = ContactsViewModel.Factory
     )
     val contacts by contactsViewModel.contacts.collectAsStateWithLifecycle()
     val isLoading by contactsViewModel.isLoading.collectAsStateWithLifecycle()
     val errorMessage by contactsViewModel.errorMessage.collectAsStateWithLifecycle()
-    val pendingInvite by contactsViewModel.pendingInviteContact.collectAsStateWithLifecycle()
+    val pendingOtpVerification by contactsViewModel.pendingOtpVerification.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    // Navigate to OTP verification screen when contact is added
+    LaunchedEffect(pendingOtpVerification) {
+        Log.d("TrustedContacts", "LaunchedEffect triggered: pendingOtpVerification=$pendingOtpVerification")
+        pendingOtpVerification?.let { otpData ->
+            Log.d("TrustedContacts", "Navigating to OTP screen: contactId=${otpData.contactId}, phone=${otpData.phone}")
+            navController.navigate(
+                "contact_otp_verification/${otpData.contactId}/${otpData.phone}/${otpData.name}/${otpData.expiresInSeconds}"
+            )
+            contactsViewModel.clearOtpVerification()
+        }
+    }
 
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedCountry by remember { mutableStateOf(ALL_COUNTRIES.first()) } // India (+91) default
@@ -182,7 +204,7 @@ fun TrustedContactsScreen(onBack: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
-                        onClick = onBack,
+                        onClick = { navController.popBackStack() },
                         modifier = Modifier.size(44.dp).clip(CircleShape).background(Color.White.copy(0.08f))
                     ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(20.dp))
@@ -493,14 +515,6 @@ fun TrustedContactsScreen(onBack: () -> Unit) {
                 }
             }
         }
-
-        // Invite dialog — appears after a contact is successfully added
-        pendingInvite?.let { contact ->
-            InviteContactDialog(
-                contact = contact,
-                onDismiss = { contactsViewModel.dismissInvite() }
-            )
-        }
     }
 }
 
@@ -643,24 +657,56 @@ fun ContactApiItem(
             Spacer(Modifier.width(16.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(contact.name, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text(contact.phone, color = Color.Gray, fontSize = 13.sp)
-            }
-
-            contact.relationship?.let {
-                Surface(
-                    color = if (isEmergency) Color.Red.copy(0.12f) else Color.White.copy(0.05f),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        text = it,
-                        color = if (isEmergency) Color.Red else Color.Gray,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(contact.name, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(8.dp))
+                    if (contact.isVerified) {
+                        Surface(
+                            color = Color(0xFF006400).copy(0.2f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                "✓ Verified",
+                                color = Color(0xFF90EE90),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    } else {
+                        Surface(
+                            color = Color(0xFFFF8800).copy(0.2f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                "⚠️ Pending",
+                                color = Color(0xFFFFAA00),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
                 }
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(contact.phone, color = Color.Gray, fontSize = 13.sp)
+                    contact.relationship?.let {
+                        Spacer(Modifier.width(8.dp))
+                        Surface(
+                            color = if (isEmergency) Color.Red.copy(0.12f) else Color.White.copy(0.05f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = it,
+                                color = if (isEmergency) Color.Red else Color.Gray,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
             }
 
             if (!isEmergency) {

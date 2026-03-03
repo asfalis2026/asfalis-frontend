@@ -1,6 +1,7 @@
 package com.yourname.womensafety.data.local
 
 import android.content.Context
+import android.provider.Settings
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -12,6 +13,7 @@ import com.yourname.womensafety.data.network.dto.RefreshRequest
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.util.UUID
 
 // Extension property for DataStore
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "raksha_auth")
@@ -27,6 +29,7 @@ class TokenManager(private val context: Context) {
         private val IS_LOGGED_IN = booleanPreferencesKey("is_logged_in")
         private val ONBOARDING_COMPLETE = booleanPreferencesKey("onboarding_complete")
         private val PERMISSIONS_GRANTED = booleanPreferencesKey("permissions_granted")
+        private val DEVICE_ID = stringPreferencesKey("device_id")
     }
 
     // --- ACCESS TOKEN ---
@@ -99,6 +102,26 @@ class TokenManager(private val context: Context) {
             prefs.remove(USER_ID)
             prefs[IS_LOGGED_IN] = false
         }
+    }
+
+    // --- DEVICE ID (frontend identifier for device-binding workflows) ---
+    fun getDeviceId(): Flow<String?> = context.dataStore.data.map { it[DEVICE_ID] }
+
+    suspend fun getOrCreateDeviceId(): String {
+        val existing = getDeviceId().first()
+        if (!existing.isNullOrBlank()) return existing
+
+        val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+        val generated = if (!androidId.isNullOrBlank()) {
+            "android-$androidId"
+        } else {
+            "generated-${UUID.randomUUID()}"
+        }
+
+        context.dataStore.edit { prefs ->
+            prefs[DEVICE_ID] = generated
+        }
+        return generated
     }
 
     // --- REFRESH ACCESS TOKEN (called by AuthInterceptor) ---
