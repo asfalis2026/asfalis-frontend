@@ -38,6 +38,10 @@ object AppServiceLocator {
         SettingsRepository(RetrofitClient.createService<SettingsApiService>(_tokenManager))
     }
 
+    val protectionRepository: ProtectionRepository by lazy {
+        ProtectionRepository(RetrofitClient.createService<ProtectionApiService>(_tokenManager))
+    }
+
     val locationRepository: LocationRepository by lazy {
         LocationRepository(RetrofitClient.createService<LocationApiService>(_tokenManager))
     }

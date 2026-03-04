@@ -25,6 +25,16 @@ interface ProtectionApiService {
         @Body request: SensorWindowRequest
     ): Response<ApiResponse<PredictionResult>>
 
+    /**
+     * Submit true/false alarm feedback after an Auto SOS resolves.
+     * Re-labels the sensor data captured at alert time for next model training run.
+     */
+    @POST("protection/feedback/{alertId}")
+    suspend fun submitFeedback(
+        @Path("alertId") alertId: String,
+        @Body request: FeedbackRequest
+    ): Response<ApiResponse<Unit>>
+
     @POST("protection/collect")
     suspend fun collectData(
         @Body request: SensorTrainingRequest

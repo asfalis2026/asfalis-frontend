@@ -232,17 +232,24 @@ fun AppNavGraph() {
                 composable("help") { HelpSupportScreen(navController) }
                 composable("about") { AboutAppScreen(navController) }
                 composable(
-                    route = "sos_alert?triggerType={triggerType}",
+                    route = "sos_alert?triggerType={triggerType}&alertId={alertId}",
                     arguments = listOf(
                         navArgument("triggerType") {
                             type = NavType.StringType
                             defaultValue = "manual"
+                        },
+                        navArgument("alertId") {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = null
                         }
                     )
                 ) { backStackEntry ->
                     val triggerType = backStackEntry.arguments?.getString("triggerType") ?: "manual"
+                    val alertId = backStackEntry.arguments?.getString("alertId")
                     SOSAlertScreen(
                         triggerType = triggerType,
+                        existingAlertId = alertId,
                         onSafe = {
                             navController.navigate("dashboard") {
                                 popUpTo("dashboard") { inclusive = true }

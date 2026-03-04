@@ -35,13 +35,28 @@ data class SensorAnalysisResult(
 /** For POST /protection/predict — ML danger prediction. */
 data class SensorWindowRequest(
     @SerializedName("window") val window: List<List<Float>>,
-    @SerializedName("location") val location: String? = null
+    /** "accelerometer" (default) or "gyroscope" — used server-side for one-hot feature encoding. */
+    @SerializedName("sensor_type") val sensorType: String = "accelerometer",
+    @SerializedName("location") val location: String? = null,
+    @SerializedName("latitude") val latitude: Double? = null,
+    @SerializedName("longitude") val longitude: Double? = null
 )
 
 data class PredictionResult(
-    @SerializedName("prediction") val prediction: Int,
-    @SerializedName("confidence") val confidence: Float,
-    @SerializedName("sos_sent") val sosSent: Boolean
+    @SerializedName("prediction") val prediction: Int = 0,
+    @SerializedName("confidence") val confidence: Float = 0f,
+    @SerializedName("sensor_type") val sensorType: String? = null,
+    @SerializedName("sos_sent") val sosSent: Boolean,
+    /** Present when sos_sent = true. Store immediately — needed for countdown and feedback. */
+    @SerializedName("alert_id") val alertId: String? = null,
+    @SerializedName("message") val message: String? = null,
+    /** Present when rate-limited. Seconds to wait before Auto SOS can trigger again. */
+    @SerializedName("retry_after_seconds") val retryAfterSeconds: Int? = null
+)
+
+/** POST /api/protection/feedback/<alert_id> */
+data class FeedbackRequest(
+    @SerializedName("is_false_alarm") val isFalseAlarm: Boolean
 )
 
 data class SensorTrainingRequest(

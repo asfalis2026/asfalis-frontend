@@ -22,7 +22,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import android.widget.Toast
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -32,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.yourname.womensafety.R
+import com.yourname.womensafety.ui.viewmodels.AutoSosViewModel
 import com.yourname.womensafety.ui.viewmodels.DashboardViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -42,13 +45,51 @@ fun DashboardScreen(navController: NavController) {
     val dashboardViewModel: DashboardViewModel = viewModel(
         factory = DashboardViewModel.Factory
     )
+    val autoSosViewModel: AutoSosViewModel = viewModel()
+
     val isProtectionOn by dashboardViewModel.isProtectionActive.collectAsStateWithLifecycle()
     val userName by dashboardViewModel.userName.collectAsStateWithLifecycle()
+    val autoSosMonitoring by dashboardViewModel.autoSosMonitoring.collectAsStateWithLifecycle()
+    val shakeSensitivity by dashboardViewModel.shakeSensitivity.collectAsStateWithLifecycle()
+    val sensorActive by autoSosViewModel.isActive.collectAsStateWithLifecycle()
     var isBraceletConnected by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
+    // Load protection status and settings on startup
     LaunchedEffect(Unit) {
         dashboardViewModel.loadProtectionStatus()
         dashboardViewModel.loadGreeting()
+    }
+
+    // Start/stop Auto SOS sensor monitoring whenever the combined flag changes
+    LaunchedEffect(autoSosMonitoring, shakeSensitivity) {
+        autoSosViewModel.setActive(autoSosMonitoring, shakeSensitivity)
+    }
+
+    // Navigate to SOS countdown screen when danger is detected by the ML model
+    LaunchedEffect(Unit) {
+        autoSosViewModel.dangerDetected.collect { event ->
+            // Show a brief snackbar so the user sees the transition
+            snackbarHostState.showSnackbar(
+                message = "⚠️ Danger detected! Starting SOS countdown...",
+                duration = SnackbarDuration.Short
+            )
+            navController.navigate(
+                "sos_alert?triggerType=${event.triggerType}&alertId=${event.alertId}"
+            )
+        }
+    }
+
+    // Show a Toast whenever the 10-minute cooldown starts after an Auto SOS trigger
+    LaunchedEffect(Unit) {
+        autoSosViewModel.cooldownStarted.collect {
+            Toast.makeText(
+                context,
+                "🔒 Auto SOS triggered. Monitoring paused for 10 minutes.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     var showSearchSheet by remember { mutableStateOf(false) }
@@ -228,14 +269,24 @@ fun DashboardScreen(navController: NavController) {
             if (isProtectionOn) {
                 Surface(
                     modifier = Modifier.fillMaxWidth().height(52.dp),
-                    color = Color(0xFFE10600).copy(0.1f),
+                    color = if (sensorActive) Color(0xFFE10600).copy(0.1f) else Color.White.copy(0.05f),
                     shape = RoundedCornerShape(16.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE10600).copy(0.2f))
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (sensorActive) Color(0xFFE10600).copy(0.2f) else Color.White.copy(0.08f)
+                    )
                 ) {
                     Row(modifier = Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(8.dp).background(Color(0xFF00FF00), CircleShape))
+                        Box(modifier = Modifier.size(8.dp).background(
+                            if (sensorActive) Color(0xFF00FF00).copy(alpha = pulseAlpha) else Color(0xFFFFAA00),
+                            CircleShape
+                        ))
                         Spacer(Modifier.width(12.dp))
-                        Text("System Active • Monitoring Movement", color = Color.White, fontSize = 13.sp)
+                        Text(
+                            if (sensorActive) "Auto SOS Active • Shake to trigger" else "System Active • Starting sensors...",
+                            color = Color.White,
+                            fontSize = 13.sp
+                        )
                     }
                 }
             }
@@ -260,6 +311,21 @@ fun DashboardScreen(navController: NavController) {
                     }
                 )
             }
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp)
+        ) { data ->
+            Snackbar(
+                snackbarData = data,
+                containerColor = Color(0xFF2D0000),
+                contentColor = Color.White,
+                shape = RoundedCornerShape(12.dp)
+            )
         }
     }
 }

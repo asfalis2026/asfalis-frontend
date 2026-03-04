@@ -42,6 +42,7 @@ fun SettingsScreen(navController: NavController) {
     var sosMessage by remember {
         mutableStateOf("Emergency! I need help. This is an automated SOS alert from ASFALIS. My live location is attached.")
     }
+    var autoSosEnabled by remember { mutableStateOf(false) }
 
     // Populate local state when settings arrive from API
     LaunchedEffect(loadedSettings) {
@@ -51,7 +52,8 @@ fun SettingsScreen(navController: NavController) {
                 "high" -> "High"
                 else -> "Medium"
             }
-            s.sosMessage?.let { sosMessage = it }
+            sosMessage = s.sosMessage
+            autoSosEnabled = s.autoSosEnabled
         }
     }
 
@@ -101,7 +103,8 @@ fun SettingsScreen(navController: NavController) {
                 onClick = {
                     val request = UpdateSettingsRequest(
                         sosMessage = sosMessage.trim().take(500),
-                        shakeSensitivity = sensitivity.lowercase()
+                        shakeSensitivity = sensitivity.lowercase(),
+                        autoSosEnabled = autoSosEnabled
                     )
                     settingsViewModel.saveSettings(request)
                 },
@@ -217,6 +220,62 @@ fun SettingsScreen(navController: NavController) {
                         fontSize = 12.sp
                     )
                 }
+            }
+        }
+
+        Spacer(Modifier.height(40.dp))
+
+        // --- SECTION: AUTO SOS ---
+        SettingsHeader(Icons.Default.Sensors, "Auto SOS")
+        Text(
+            "When enabled, your device sensors continuously monitor for sudden impacts or falls. " +
+                "A danger prediction from our ML model will automatically start an SOS countdown.",
+            color = Color.Gray,
+            fontSize = 13.sp,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = Color.White.copy(0.03f),
+            shape = RoundedCornerShape(20.dp),
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                if (autoSosEnabled) Color(0xFFE10600).copy(0.3f) else Color.White.copy(0.05f)
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (autoSosEnabled) "Auto SOS Active" else "Auto SOS Disabled",
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        text = if (autoSosEnabled)
+                            "Sensor monitoring will start when shield is armed"
+                        else
+                            "Toggle on to enable motion-based SOS",
+                        color = Color.Gray,
+                        fontSize = 12.sp
+                    )
+                }
+                Switch(
+                    checked = autoSosEnabled,
+                    onCheckedChange = { autoSosEnabled = it },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Color(0xFFE10600),
+                        uncheckedThumbColor = Color.Gray,
+                        uncheckedTrackColor = Color.White.copy(0.1f)
+                    )
+                )
             }
         }
 

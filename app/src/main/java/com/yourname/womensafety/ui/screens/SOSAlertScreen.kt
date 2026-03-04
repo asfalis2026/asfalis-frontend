@@ -36,6 +36,8 @@ import kotlin.coroutines.resume
 @Composable
 fun SOSAlertScreen(
     triggerType: String = "manual",
+    /** Pre-existing alert ID from Auto SOS (predict API). When set, skips triggerSos(). */
+    existingAlertId: String? = null,
     onSafe: () -> Unit
 ) {
     val context = LocalContext.current
@@ -47,21 +49,26 @@ fun SOSAlertScreen(
     // Determine if this is an automatic trigger
     val isAutomatic = triggerType != "manual"
 
-    // Trigger SOS with real GPS coordinates
+    // For Auto SOS: the alert was already created by predict API — init with existing alertId.
+    // For manual SOS: trigger a new alert with real GPS coordinates.
     LaunchedEffect(Unit) {
-        val fusedClient = LocationServices.getFusedLocationProviderClient(context)
-        val location = try {
-            suspendCancellableCoroutine<Location?> { cont ->
-                fusedClient.lastLocation
-                    .addOnSuccessListener { loc -> cont.resume(loc) }
-                    .addOnFailureListener { cont.resume(null) }
-            }
-        } catch (e: SecurityException) { null }
-        sosViewModel.triggerSos(
-            latitude = location?.latitude ?: 0.0,
-            longitude = location?.longitude ?: 0.0,
-            triggerType = triggerType
-        )
+        if (existingAlertId != null) {
+            sosViewModel.initWithExistingAlert(existingAlertId)
+        } else {
+            val fusedClient = LocationServices.getFusedLocationProviderClient(context)
+            val location = try {
+                suspendCancellableCoroutine<Location?> { cont ->
+                    fusedClient.lastLocation
+                        .addOnSuccessListener { loc -> cont.resume(loc) }
+                        .addOnFailureListener { cont.resume(null) }
+                }
+            } catch (e: SecurityException) { null }
+            sosViewModel.triggerSos(
+                latitude = location?.latitude ?: 0.0,
+                longitude = location?.longitude ?: 0.0,
+                triggerType = triggerType
+            )
+        }
     }
 
     // Auto-send when countdown reaches 0
@@ -86,6 +93,10 @@ fun SOSAlertScreen(
             // Trigger request is still in-flight. Wait for alertId, then dispatch before leaving.
             pendingHomeNavigation = true
         } else {
+            // Already sent or cancelled — submit feedback (auto SOS: real danger) then navigate
+            if (isAutomatic && uiState.isSent) {
+                uiState.alertId?.let { sosViewModel.submitFeedback(it, isFalseAlarm = false) }
+            }
             onSafe()
         }
     }
@@ -96,6 +107,10 @@ fun SOSAlertScreen(
     LaunchedEffect(pendingHomeNavigation, uiState.isSent) {
         if (pendingHomeNavigation && uiState.isSent) {
             pendingHomeNavigation = false
+            // Submit feedback for auto SOS: dispatched = real danger
+            if (isAutomatic) {
+                uiState.alertId?.let { sosViewModel.submitFeedback(it, isFalseAlarm = false) }
+            }
             onSafe()
         }
     }
@@ -121,7 +136,13 @@ fun SOSAlertScreen(
 
     // Navigate back when cancelled or sent
     LaunchedEffect(uiState.isCancelled) {
-        if (uiState.isCancelled) onSafe()
+        if (uiState.isCancelled) {
+            // Submit feedback for auto SOS: cancelled = false alarm
+            if (isAutomatic) {
+                uiState.alertId?.let { sosViewModel.submitFeedback(it, isFalseAlarm = true) }
+            }
+            onSafe()
+        }
     }
 
     val infiniteTransition = rememberInfiniteTransition(label = "alert")

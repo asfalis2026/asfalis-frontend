@@ -28,12 +28,17 @@ class SettingsViewModel(
     private val _saveSuccess = MutableStateFlow(false)
     val saveSuccess: StateFlow<Boolean> = _saveSuccess
 
+    /** Reflects the persisted auto_sos_enabled value from the backend. */
+    private val _autoSosEnabled = MutableStateFlow(false)
+    val autoSosEnabled: StateFlow<Boolean> = _autoSosEnabled
+
     fun loadSettings() {
         viewModelScope.launch {
             _isLoading.value = true
             when (val result = settingsRepository.getSettings()) {
                 is NetworkResult.Success -> {
                     _settings.value = result.data
+                    _autoSosEnabled.value = result.data.autoSosEnabled
                     _isLoading.value = false
                 }
                 is NetworkResult.Error -> {
@@ -51,6 +56,7 @@ class SettingsViewModel(
             when (val result = settingsRepository.updateSettings(request)) {
                 is NetworkResult.Success -> {
                     _settings.value = result.data
+                    _autoSosEnabled.value = result.data.autoSosEnabled
                     _saveSuccess.value = true
                     _isLoading.value = false
                 }

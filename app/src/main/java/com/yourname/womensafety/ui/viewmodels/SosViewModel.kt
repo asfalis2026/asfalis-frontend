@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.yourname.womensafety.data.AppServiceLocator
 import com.yourname.womensafety.data.repository.NetworkResult
+import com.yourname.womensafety.data.repository.ProtectionRepository
 import com.yourname.womensafety.data.repository.SosRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,7 +21,8 @@ data class SosUiState(
 )
 
 class SosViewModel(
-    private val sosRepository: SosRepository
+    private val sosRepository: SosRepository,
+    private val protectionRepository: ProtectionRepository = AppServiceLocator.protectionRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SosUiState())
@@ -81,6 +83,27 @@ class SosViewModel(
                 }
                 is NetworkResult.Loading -> Unit
             }
+        }
+    }
+
+    /**
+     * Use this for Auto SOS alerts where the backend already created the alert
+     * via POST /protection/predict. Skips the triggerSos() call.
+     */
+    fun initWithExistingAlert(alertId: String) {
+        Log.d("SosViewModel", "initWithExistingAlert: alertId=$alertId")
+        _uiState.value = SosUiState(alertId = alertId)
+    }
+
+    /**
+     * Submit true/false alarm feedback after an Auto SOS alert resolves.
+     * Must be called once per auto-triggered alert to re-label ML training data.
+     */
+    fun submitFeedback(alertId: String, isFalseAlarm: Boolean) {
+        Log.d("SosViewModel", "submitFeedback: alertId=$alertId, isFalseAlarm=$isFalseAlarm")
+        viewModelScope.launch {
+            protectionRepository.submitFeedback(alertId, isFalseAlarm)
+            // Feedback is best-effort — we don't surface errors to the user
         }
     }
 
