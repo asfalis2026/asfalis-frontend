@@ -35,28 +35,36 @@ class SosHistoryViewModel(
         viewModelScope.launch {
             _uiState.value = SosHistoryUiState.Loading
             try {
-                // Hard cap of 15 seconds — the backend's GET /sos/history runs a bulk
-                // DB UPDATE that can hang due to a locked row (known backend bug).
-                // Without a timeout, the spinner runs forever.
-                val result = withTimeout(15_000L) {
-                    sosRepository.getSosHistory()
-                }
+                val result = withTimeout(15_000L) { sosRepository.getSosHistory() }
                 when (result) {
                     is NetworkResult.Success -> _uiState.value = SosHistoryUiState.Success(result.data)
                     is NetworkResult.Error   -> _uiState.value = classifyError(result.code, result.message)
                     is NetworkResult.Loading -> Unit
                 }
             } catch (e: TimeoutCancellationException) {
-                _uiState.value = SosHistoryUiState.Error(
-                    "Server took too long to respond. Tap Retry."
-                )
+                _uiState.value = SosHistoryUiState.Error("Server took too long to respond. Tap Retry.")
             } catch (e: Exception) {
-                _uiState.value = SosHistoryUiState.Error(
-                    "Could not load history. Tap Retry."
-                )
+                _uiState.value = SosHistoryUiState.Error("Could not load history. Tap Retry.")
             }
         }
     }
+
+    /** Remove a single alert from the local list (UI-only, no backend call). */
+    fun deleteItem(item: SosHistoryItem) {
+        val current = _uiState.value
+        if (current is SosHistoryUiState.Success) {
+            _uiState.value = SosHistoryUiState.Success(current.items - item)
+        }
+    }
+
+    /** Clear all locally visible history entries (UI-only, no backend call). */
+    fun clearAll() {
+        val current = _uiState.value
+        if (current is SosHistoryUiState.Success) {
+            _uiState.value = SosHistoryUiState.Success(emptyList())
+        }
+    }
+
 
     /**
      * Maps error codes to user-friendly messages.

@@ -144,7 +144,9 @@ fun TrustedContactsScreen(navController: NavController) {
     }
 
     var showAddDialog by remember { mutableStateOf(false) }
-    var selectedCountry by remember { mutableStateOf(ALL_COUNTRIES.first()) } // India (+91) default
+    var contactToEdit by remember { mutableStateOf<com.yourname.womensafety.data.network.dto.TrustedContact?>(null) }
+    var contactToDelete by remember { mutableStateOf<com.yourname.womensafety.data.network.dto.TrustedContact?>(null) }
+    var selectedCountry by remember { mutableStateOf(ALL_COUNTRIES.first()) }
     var nameInput by remember { mutableStateOf("") }
     var phoneInput by remember { mutableStateOf("") }
     var relationInput by remember { mutableStateOf("") }
@@ -248,7 +250,8 @@ fun TrustedContactsScreen(navController: NavController) {
                             ContactApiItem(
                                 contact = contact,
                                 isEmergency = true,
-                                onDelete = { contactsViewModel.deleteContact(contact.id) },
+                                onEditRequest = { contactToEdit = contact },
+                                onDeleteRequest = { contactToDelete = contact },
                                 onSetPrimary = { contactsViewModel.setPrimaryContact(contact.id) }
                             )
                         }
@@ -268,7 +271,8 @@ fun TrustedContactsScreen(navController: NavController) {
                             ContactApiItem(
                                 contact = contact,
                                 isEmergency = false,
-                                onDelete = { contactsViewModel.deleteContact(contact.id) },
+                                onEditRequest = { contactToEdit = contact },
+                                onDeleteRequest = { contactToDelete = contact },
                                 onSetPrimary = { contactsViewModel.setPrimaryContact(contact.id) }
                             )
                         }
@@ -282,6 +286,120 @@ fun TrustedContactsScreen(navController: NavController) {
                         }
                     }
                 }
+            }
+        }
+
+        // --- Delete Contact Confirmation Dialog ---
+        contactToDelete?.let { contact ->
+            AlertDialog(
+                onDismissRequest = { contactToDelete = null },
+                containerColor = Color(0xFF141414),
+                shape = RoundedCornerShape(24.dp),
+                icon = {
+                    Box(
+                        modifier = Modifier.size(48.dp).clip(CircleShape)
+                            .background(Color(0xFFE10600).copy(0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.PersonRemove, null, tint = Color(0xFFE10600), modifier = Modifier.size(24.dp))
+                    }
+                },
+                title = {
+                    Text("Remove Contact?", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                },
+                text = {
+                    Text(
+                        "Remove ${contact.name} (${contact.phone}) from your trusted contacts? They will no longer receive SOS alerts.",
+                        color = Color.Gray, fontSize = 14.sp, lineHeight = 20.sp
+                    )
+                },
+                dismissButton = {
+                    TextButton(onClick = { contactToDelete = null }) {
+                        Text("Cancel", color = Color.White.copy(0.7f))
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            contactsViewModel.deleteContact(contact.id)
+                            contactToDelete = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE10600)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Remove", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            )
+        }
+
+        // --- Edit Contact Dialog ---
+        contactToEdit?.let { contact ->
+            var editNameInput by remember { mutableStateOf(contact.name) }
+            var editRelationInput by remember { mutableStateOf(contact.relationship ?: "") }
+            var editNameError by remember { mutableStateOf<String?>(null) }
+
+            Dialog(onDismissRequest = { contactToEdit = null }) {
+                Column(
+                    modifier = Modifier
+                        .width(340.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Color(0xFF1A0000))
+                        .padding(24.dp)
+                ) {
+                    Text("Edit Contact", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(20.dp))
+
+                        // --- Name ---
+                        OutlinedTextField(
+                            value = editNameInput,
+                            onValueChange = { editNameInput = it; editNameError = null },
+                            label = { Text("Full Name *", color = Color.Gray) },
+                            isError = editNameError != null,
+                            supportingText = editNameError?.let { { Text(it, color = Color(0xFFE10600), fontSize = 11.sp) } },
+                            singleLine = true,
+                            colors = outlinedFieldColors(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(12.dp))
+
+                        // --- Relationship ---
+                        OutlinedTextField(
+                            value = editRelationInput,
+                            onValueChange = { editRelationInput = it },
+                            label = { Text("Relationship (optional)", color = Color.Gray) },
+                            singleLine = true,
+                            colors = outlinedFieldColors(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(24.dp))
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Button(
+                                onClick = { contactToEdit = null },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(0.1f))
+                            ) { Text("Cancel", color = Color.White) }
+
+                            Button(
+                                onClick = {
+                                    if (editNameInput.isBlank()) {
+                                        editNameError = "Name is required"
+                                    } else {
+                                        contactsViewModel.updateContact(
+                                            contactId = contact.id,
+                                            name = editNameInput.trim(),
+                                            phone = contact.phone, // pass original phone to satisfy validation
+                                            relationship = editRelationInput.trim().ifEmpty { null }
+                                        )
+                                        contactToEdit = null
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE10600))
+                            ) { Text("Save", color = Color.White) }
+                        }
+                    }
             }
         }
 
@@ -314,10 +432,6 @@ fun TrustedContactsScreen(navController: NavController) {
             }
 
             Dialog(onDismissRequest = { resetDialog() }) {
-                Box(
-                    modifier = Modifier.fillMaxSize().background(Color.Black.copy(0.7f)),
-                    contentAlignment = Alignment.Center
-                ) {
                     Column(
                         modifier = Modifier
                             .width(340.dp)
@@ -379,12 +493,6 @@ fun TrustedContactsScreen(navController: NavController) {
                                 // Country picker dropdown
                                 if (countryExpanded) {
                                     Dialog(onDismissRequest = { countryExpanded = false }) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .background(Color.Black.copy(0.6f)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
                                             Column(
                                                 modifier = Modifier
                                                     .fillMaxWidth(0.85f)
@@ -456,7 +564,6 @@ fun TrustedContactsScreen(navController: NavController) {
                                                     }
                                                 }
                                             }
-                                        }
                                     }
                                 }
                             }
@@ -512,7 +619,6 @@ fun TrustedContactsScreen(navController: NavController) {
                             ) { Text("Add", color = Color.White) }
                         }
                     }
-                }
             }
         }
     }
@@ -543,12 +649,6 @@ fun InviteContactDialog(
     }.trimEnd()
 
     Dialog(onDismissRequest = onDismiss) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(0.75f)),
-            contentAlignment = Alignment.Center
-        ) {
             Column(
                 modifier = Modifier
                     .width(320.dp)
@@ -612,7 +712,6 @@ fun InviteContactDialog(
                     Text("Skip", color = Color.Gray, fontSize = 14.sp)
                 }
             }
-        }
     }
 }
 
@@ -630,7 +729,8 @@ private fun outlinedFieldColors() = OutlinedTextFieldDefaults.colors(
 fun ContactApiItem(
     contact: TrustedContact,
     isEmergency: Boolean,
-    onDelete: () -> Unit,
+    onEditRequest: () -> Unit,
+    onDeleteRequest: () -> Unit,
     onSetPrimary: () -> Unit
 ) {
     val initials = contact.name.split(" ")
@@ -746,7 +846,15 @@ fun ContactApiItem(
                         )
                     }
                 }
-                IconButton(onClick = onDelete, modifier = Modifier.size(34.dp)) {
+                IconButton(onClick = onEditRequest, modifier = Modifier.size(34.dp)) {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = "Edit",
+                        tint = Color.White.copy(0.7f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                IconButton(onClick = onDeleteRequest, modifier = Modifier.size(34.dp)) {
                     Icon(
                         Icons.Default.Delete,
                         contentDescription = "Delete",

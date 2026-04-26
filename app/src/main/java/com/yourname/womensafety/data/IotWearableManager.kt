@@ -100,6 +100,7 @@ class IotWearableManager(
     private val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
     private var socket: BluetoothSocket? = null
     private var readerJob: Job? = null
+    private var commandJob: Job? = null
 
     /** Epoch-millis timestamp of the last received press (for double-tap detection). */
     @Volatile private var lastPressTime = 0L
@@ -136,6 +137,27 @@ class IotWearableManager(
 
     @SuppressLint("MissingPermission")
     fun startListening(scope: CoroutineScope, savedMac: String) {
+        // ── Command consumer: sends APP_TRIGGER_SOS to wearable when ML/manual SOS fires ──
+        commandJob = scope.launch(Dispatchers.IO) {
+            IotEventBus.commands.collect { command ->
+                when (command) {
+                    is IotCommand.TriggerFeedback -> {
+                        if (isCurrentlyConnected && socket != null) {
+                            try {
+                                socket?.outputStream?.write("APP_TRIGGER_SOS\n".toByteArray())
+                                socket?.outputStream?.flush()
+                                Log.d(TAG, "Sent APP_TRIGGER_SOS to wearable — haptic feedback triggered")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to send APP_TRIGGER_SOS to wearable", e)
+                            }
+                        } else {
+                            Log.d(TAG, "TriggerFeedback received but wearable not connected — skipped")
+                        }
+                    }
+                }
+            }
+        }
+
         readerJob = scope.launch(Dispatchers.IO) {
             // Outer retry loop — reconnects automatically on any socket failure or drop.
             while (isActive) {
@@ -625,6 +647,8 @@ class IotWearableManager(
         consecutiveBreachCount = 0
         pendingSingleTapJob?.cancel()
         pendingSingleTapJob = null
+        commandJob?.cancel()
+        commandJob = null
         readerJob?.cancel()
         runCatching { socket?.close() }
         socket = null

@@ -28,9 +28,13 @@ object RetrofitClient {
         val okHttpClient = OkHttpClient.Builder()
             .addInterceptor(AuthInterceptor(tokenManager))
             .addInterceptor(loggingInterceptor)
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .writeTimeout(20, TimeUnit.SECONDS)
+            // Extended timeouts to handle Render free-tier cold-start latency (up to 60s).
+            // This is a known infrastructure limitation — we must not timeout before the
+            // server has had a chance to wake up and respond.
+            .connectTimeout(90, TimeUnit.SECONDS)
+            .readTimeout(90, TimeUnit.SECONDS)
+            .writeTimeout(90, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
             .build()
 
         return Retrofit.Builder()
@@ -54,8 +58,10 @@ object RetrofitClient {
         }
         val okHttpClient = OkHttpClient.Builder()
             .addInterceptor(loggingInterceptor)
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            .connectTimeout(90, TimeUnit.SECONDS)
+            .readTimeout(90, TimeUnit.SECONDS)
+            .writeTimeout(90, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
             .build()
 
         return Retrofit.Builder()

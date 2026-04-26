@@ -12,6 +12,8 @@ import android.util.Log
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
+import com.yourname.womensafety.data.IotCommand
+import com.yourname.womensafety.data.IotEventBus
 import com.yourname.womensafety.data.network.dto.SensorReading
 import com.yourname.womensafety.data.repository.NetworkResult
 import com.yourname.womensafety.data.repository.ProtectionRepository
@@ -72,15 +74,21 @@ class AutoSosManager(
     companion object {
         private const val TAG = "AutoSosManager"
         /**
-         * Accumulate 300 readings per window (∼10 seconds @ 30 Hz).
+         * Accumulate 300 readings per inference window (~6s @ 50Hz).
          * The LightGBM ONNX model is trained on exactly 300-point windows.
          */
         private const val WINDOW_SIZE = 300
         /**
-         * Minimum number of high-magnitude readings inside a window before running inference.
-         * Reduced from 3 to 2 so brief sharp movements are still caught.
+         * Minimum high-magnitude hits inside any 300-reading window before inference runs.
+         * Set to 1: even a single vigorous shake reading should open the gate.
+         * The ONNX model (threshold=0.60) is the primary safety filter.
          */
-        private const val MAGNITUDE_HIT_THRESHOLD = 2
+        private const val MAGNITUDE_HIT_THRESHOLD = 1
+        /**
+         * Run inference every N new readings using a SLIDING WINDOW over the latest 300.
+         * This prevents waiting 6 full seconds between attempts — we check every ~1s.
+         */
+        private const val INFERENCE_STRIDE = 50
         /** 10-minute cooldown after any ML-triggered SOS to prevent duplicate alerts. */
         private const val COOLDOWN_MS = 600_000L
     }
@@ -121,6 +129,9 @@ class AutoSosManager(
     /** Number of readings in the current window that exceeded the magnitude threshold. */
     private var magnitudeHitCount = 0
 
+    /** Number of readings received since the last inference attempt (for sliding window). */
+    private var readingsSinceLastInference = 0
+
     private var isCooldownActive   = false
     private var isWindowBeingSent  = false
     private var cooldownJob: Job?  = null
@@ -135,9 +146,14 @@ class AutoSosManager(
             val y = event.values[1]
             val z = event.values[2]
 
+            // Convert m/s² to g (Gravity units) because the ONNX model was trained on g's
+            val xG = x / SensorManager.STANDARD_GRAVITY
+            val yG = y / SensorManager.STANDARD_GRAVITY
+            val zG = z / SensorManager.STANDARD_GRAVITY
+
             // Maintain both buffer variants in lock-step
-            val triplet  = listOf(x, y, z)
-            val reading  = SensorReading(x, y, z, System.currentTimeMillis())
+            val triplet  = listOf(xG, yG, zG)
+            val reading  = SensorReading(xG, yG, zG, System.currentTimeMillis())
 
             if (rollingBuffer.size >= WINDOW_SIZE) {
                 rollingBuffer.removeFirst()
@@ -145,14 +161,12 @@ class AutoSosManager(
             }
             rollingBuffer.addLast(triplet)
             rawReadingBuffer.addLast(reading)
+            readingsSinceLastInference++
 
-            // Magnitude pre-filter — lightweight gate before TFLite inference.
-            // Thresholds (m/s²): high=12, medium=15, low=20
-            // Earth gravity alone is ~9.8 m/s², so these catch deliberate shaking/impacts.
+            // Magnitude pre-filter (uses original m/s² to match threshold of 12f/15f/20f)
             val magnitude = sqrt(x * x + y * y + z * z)
             if (magnitude > 10f) {
-                // Log ALL readings above 10 m/s² so we can confirm sensor is firing
-                Log.v(TAG, "Magnitude=%.2f threshold=%.2f hits=$magnitudeHitCount armed=$isArmed cooldown=$isCooldownActive".format(
+                Log.v(TAG, "Mag=%.2f threshold=%.2f hits=$magnitudeHitCount armed=$isArmed cooldown=$isCooldownActive".format(
                     magnitude, magnitudeThreshold))
             }
             if (magnitude > magnitudeThreshold) {
@@ -161,15 +175,18 @@ class AutoSosManager(
                     magnitude, magnitudeThreshold))
             }
 
-            // Only run inference when a full window is accumulated AND enough readings
-            // exceed the threshold AND we are not already processing or in cooldown
+            // SLIDING WINDOW: run inference every INFERENCE_STRIDE new readings,
+            // as long as we have a full 300-point window available.
+            // This gives us ~1s response time instead of waiting 6s for a full non-overlapping window.
             if (rollingBuffer.size >= WINDOW_SIZE
+                && readingsSinceLastInference >= INFERENCE_STRIDE
                 && magnitudeHitCount >= MAGNITUDE_HIT_THRESHOLD
                 && !isCooldownActive
                 && !isWindowBeingSent
                 && isArmed
             ) {
-                Log.w(TAG, "Stage 1 gate passed ($magnitudeHitCount hits) — running local ONNX inference")
+                readingsSinceLastInference = 0
+                Log.w(TAG, "Sliding window gate passed ($magnitudeHitCount hits) — running ONNX inference")
                 runLocalInference(rollingBuffer.toList(), rawReadingBuffer.toList())
             }
         }
@@ -206,7 +223,7 @@ class AutoSosManager(
             return
         }
         sensorManager.registerListener(sensorListener, sensor, SensorManager.SENSOR_DELAY_GAME)
-        Log.d(TAG, "Started ($sensorType, sensitivity=$sensitivity, threshold=$magnitudeThreshold m/s², windowSize=$WINDOW_SIZE, hitThreshold=$MAGNITUDE_HIT_THRESHOLD)")
+        Log.d(TAG, "Started ($sensorType, sensitivity=$sensitivity, threshold=$magnitudeThreshold m/s², windowSize=$WINDOW_SIZE, stride=$INFERENCE_STRIDE, hitThreshold=$MAGNITUDE_HIT_THRESHOLD, dangerThreshold=${SOSDetector.DANGER_THRESHOLD})")
     }
 
     /** Stop monitoring sensors and clear all state. */
@@ -216,10 +233,11 @@ class AutoSosManager(
         rollingBuffer.clear()
         rawReadingBuffer.clear()
         magnitudeHitCount  = 0
+        readingsSinceLastInference = 0
         isCooldownActive   = false
         isWindowBeingSent  = false
         cooldownJob?.cancel()
-        sosDetector.close()  // Release ONNX session & environment
+        sosDetector.close()
         Log.d(TAG, "Stopped monitoring")
     }
 
@@ -281,10 +299,14 @@ class AutoSosManager(
                         startCooldown()
                         _cooldownStarted.emit(Unit)
                         Log.w(TAG, "SOS triggered — alertId=$alertId type=$triggerType")
+
+                        // Fire bracelet haptic immediately when ML confirms danger —
+                        // BEFORE the UI screen appears so the user feels the warning instantly.
+                        IotEventBus.sendCommand(IotCommand.TriggerFeedback)
+
                         _dangerDetected.emit(DangerEvent(alertId, triggerType))
 
                         // Stage 4 — Sync DANGER window to backend for retraining.
-                        // We do this asynchronously so it does not block the UI countdown.
                         syncWindowToBackend(rawSnapshot, label = "danger", isSafe = false)
                     }
                     is NetworkResult.Error -> {
@@ -296,10 +318,10 @@ class AutoSosManager(
                 Log.e(TAG, "Inference/trigger error: ${e.message}", e)
             } finally {
                 isWindowBeingSent = false
-                // Clear the buffer after every inference cycle so the next 300 readings
-                // form a fresh window (non-overlapping windows reduce duplicate triggers).
-                rollingBuffer.clear()
-                rawReadingBuffer.clear()
+                // Do NOT clear the buffer after sliding-window inference —
+                // keep accumulating so the next stride overlaps with recent readings.
+                // Only reset the magnitude hit counter so the gate re-arms.
+                magnitudeHitCount = 0
             }
         }
     }

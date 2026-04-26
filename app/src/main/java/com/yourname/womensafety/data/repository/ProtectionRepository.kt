@@ -37,13 +37,12 @@ class ProtectionRepository(
 
     /**
      * Collect a labeled training window so the backend can retrain the model.
-     * The frontend now extracts 39 statistical features natively (matching labeled_windows.csv)
-     * via the AdvancedFeatureExtractor to satisfy the backend's strict Pydantic parsing.
+     * Extracts exactly 17 statistical features locally to align with backend storage schema.
      *
      * @param window           Raw [SensorReading] list (300 readings @ 50 Hz = 6 seconds).
      * @param label            "safe" or "danger"
-     * @param datasetName      Optional annotation label, e.g. "fast_walking"
-     * @param motionDescription Optional human description, e.g. "SAFE — Fast Walking"
+     * @param datasetName      Used to infer "accelerometer" vs "gyroscope"
+     * @param motionDescription Optional human description.
      */
     suspend fun collectLabeledWindow(
         window: List<SensorReading>,
@@ -52,13 +51,23 @@ class ProtectionRepository(
         motionDescription: String? = null
     ): NetworkResult<Unit> {
         val dangerLabel = if (label.lowercase() == "danger") 1 else 0
+        val sensorTypeStr = datasetName ?: "accelerometer"
         
-        val trainingRequest = com.yourname.womensafety.utils.AdvancedFeatureExtractor.extractToTrainingRequest(
-            window = window,
-            sensorType = datasetName ?: "accelerometer",
-            datasetName = datasetName,
-            dangerLabel = dangerLabel,
-            motionDescription = motionDescription
+        // 1. Convert to simple List<List<Float>> for FeatureExtractor
+        val windowFloats = window.map { listOf(it.x, it.y, it.z) }
+        
+        // 2. Extract 17 features
+        val f = com.yourname.womensafety.utils.FeatureExtractor.extract(windowFloats, sensorTypeStr)
+        
+        // 3. Map to DTO
+        val trainingRequest = SensorTrainingRequest(
+            sensorType = sensorTypeStr,
+            label = dangerLabel,
+            window = windowFloats,
+            xMean = f[0], xStd = f[1], xMax = f[2], xMin = f[3], xSumSq = f[4],
+            yMean = f[5], yStd = f[6], yMax = f[7], yMin = f[8], ySumSq = f[9],
+            zMean = f[10], zStd = f[11], zMax = f[12], zMin = f[13], zSumSq = f[14],
+            isAccelerometer = f[15], isGyroscope = f[16]
         )
 
         return safeApiCall {

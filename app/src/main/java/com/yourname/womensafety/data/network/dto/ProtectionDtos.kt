@@ -68,57 +68,31 @@ data class FeedbackRequest(
 
 /**
  * POST /protection/collect — Labeled training window.
- * The backend expects 39 extracted statistical features (matching labeled_windows.csv).
- * label: 0 = safe, 1 = danger
+ * Sends the 17 pre-computed statistical features to align with backend streaming architecture.
  */
 data class SensorTrainingRequest(
     @SerializedName("sensor_type") val sensorType: String,
-    @SerializedName("dataset_name") val datasetName: String? = null,
-    @SerializedName("danger_label") val dangerLabel: Int, // 0 = safe, 1 = danger
-    @SerializedName("motion_description") val motionDescription: String? = null,
+    @SerializedName("label") val label: Int,
+    @SerializedName("window") val window: List<List<Float>>?,
 
-    // X-axis
     @SerializedName("x_mean") val xMean: Float,
     @SerializedName("x_std") val xStd: Float,
-    @SerializedName("x_min") val xMin: Float,
     @SerializedName("x_max") val xMax: Float,
-    @SerializedName("x_range") val xRange: Float,
-    @SerializedName("x_median") val xMedian: Float,
-    @SerializedName("x_iqr") val xIqr: Float,
-    @SerializedName("x_rms") val xRms: Float,
+    @SerializedName("x_min") val xMin: Float,
+    @SerializedName("x_sum_sq") val xSumSq: Float,
 
-    // Y-axis
     @SerializedName("y_mean") val yMean: Float,
     @SerializedName("y_std") val yStd: Float,
-    @SerializedName("y_min") val yMin: Float,
     @SerializedName("y_max") val yMax: Float,
-    @SerializedName("y_range") val yRange: Float,
-    @SerializedName("y_median") val yMedian: Float,
-    @SerializedName("y_iqr") val yIqr: Float,
-    @SerializedName("y_rms") val yRms: Float,
+    @SerializedName("y_min") val yMin: Float,
+    @SerializedName("y_sum_sq") val ySumSq: Float,
 
-    // Z-axis
     @SerializedName("z_mean") val zMean: Float,
     @SerializedName("z_std") val zStd: Float,
-    @SerializedName("z_min") val zMin: Float,
     @SerializedName("z_max") val zMax: Float,
-    @SerializedName("z_range") val zRange: Float,
-    @SerializedName("z_median") val zMedian: Float,
-    @SerializedName("z_iqr") val zIqr: Float,
-    @SerializedName("z_rms") val zRms: Float,
+    @SerializedName("z_min") val zMin: Float,
+    @SerializedName("z_sum_sq") val zSumSq: Float,
 
-    // Magnitude
-    @SerializedName("mag_mean") val magMean: Float,
-    @SerializedName("mag_std") val magStd: Float,
-    @SerializedName("mag_min") val magMin: Float,
-    @SerializedName("mag_max") val magMax: Float,
-    @SerializedName("mag_range") val magRange: Float,
-    @SerializedName("mag_median") val magMedian: Float,
-    @SerializedName("mag_iqr") val magIqr: Float,
-    @SerializedName("mag_rms") val magRms: Float,
-
-    // Correlations
-    @SerializedName("xy_corr") val xyCorr: Float,
-    @SerializedName("xz_corr") val xzCorr: Float,
-    @SerializedName("yz_corr") val yzCorr: Float
+    @SerializedName("is_accelerometer") val isAccelerometer: Float,
+    @SerializedName("is_gyroscope") val isGyroscope: Float
 )

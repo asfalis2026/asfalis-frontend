@@ -8,6 +8,8 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.yourname.womensafety.data.AppServiceLocator
+import com.yourname.womensafety.data.IotCommand
+import com.yourname.womensafety.data.IotEventBus
 import com.yourname.womensafety.data.IotSosTracker
 import com.yourname.womensafety.data.repository.NetworkResult
 import com.yourname.womensafety.data.repository.ProtectionRepository
@@ -44,8 +46,11 @@ class SosViewModel(
 ) : ViewModel() {
 
     companion object {
-        /** After this many ms of isTriggering=true, unlock the cancel button */
-        private const val TRIGGER_TIMEOUT_MS = 8_000L
+        /**
+         * After this many ms of isTriggering=true, unlock the cancel button.
+         * Must be > BaseRepository max retry window (3 retries × ~30s = ~90s).
+         */
+        private const val TRIGGER_TIMEOUT_MS = 95_000L
 
         val Factory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
@@ -72,11 +77,11 @@ class SosViewModel(
 
         _uiState.value = SosUiState(isTriggering = true)
 
-        // 8-second watchdog — if the trigger hasn't resolved by then, unlock cancel
+        // Watchdog: if trigger hasn't resolved within the retry window, unlock cancel
         timeoutJob = viewModelScope.launch {
             delay(TRIGGER_TIMEOUT_MS)
             if (_uiState.value.isTriggering) {
-                Log.w("SosViewModel", "Trigger timeout — unlocking cancel button")
+                Log.w("SosViewModel", "SOS trigger timed out after ${TRIGGER_TIMEOUT_MS}ms — unlocking cancel")
                 _uiState.value = _uiState.value.copy(isConnectionTimeout = true)
             }
         }
@@ -116,18 +121,21 @@ class SosViewModel(
                         isConnectionTimeout = false,
                         isSent = alreadySent
                     )
+                    // Hardware team patch: vibrate & blink the bracelet immediately
+                    // on every successful SOS trigger (manual, IoT button, auto-fall, proximity)
+                    IotEventBus.sendCommand(IotCommand.TriggerFeedback)
                 }
                 is NetworkResult.Error -> {
                     Log.e("SosViewModel", "triggerSos error: ${result.message}, code: ${result.code}")
                     timeoutJob?.cancel()
 
                     val userMessage = when (result.code) {
-                        "NO_CONTACTS"    -> "⚠️ No verified contacts. Please add and verify a trusted contact first."
-                        "INTERNAL_ERROR" -> "Server error — please try again."
-                        "UNAUTHORIZED"   -> "Session expired. Please log in again."
-                        "NETWORK_ERROR"  -> "No internet connection. Check your network and try again."
-                        "TIMEOUT"        -> "Server is starting up. Wait a moment and tap Retry."
-                        else             -> "SOS failed: ${result.message}"
+                        "NO_CONTACTS"        -> "⚠️ No emergency contacts found. Please add a verified contact first."
+                        "INTERNAL_ERROR"     -> "Server error. Please tap Retry."
+                        "UNAUTHORIZED"       -> "Session expired. Please log in again."
+                        "NETWORK_ERROR"      -> "No internet connection. Please check your network and try again."
+                        "SERVER_UNAVAILABLE" -> "Server unavailable. Please tap Retry."
+                        else                 -> "SOS failed. Please tap Retry."
                     }
 
                     _uiState.value = SosUiState(

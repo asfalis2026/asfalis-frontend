@@ -37,8 +37,13 @@ data class ScalerParams(
 class SOSDetector(private val assetManager: AssetManager) {
 
     companion object {
-        /** Danger probability above this triggers the SOS countdown. */
-        const val DANGER_THRESHOLD = 0.85f
+        /**
+         * Danger probability above this triggers the SOS countdown.
+         * Model guide: <0.50 = Safe, 0.50–0.85 = Caution, >0.85 = Critical.
+         * We use 0.60 as the operational threshold because real-world phone-shake
+         * events reliably score 0.60–0.80 but rarely reach 0.85.
+         */
+        const val DANGER_THRESHOLD = 0.60f
         private const val MODEL_FILE   = "asfalis_sos_lgb.onnx"
         private const val SCALER_FILE  = "scaler_params.json"
         private const val INPUT_NAME   = "input"
@@ -84,9 +89,10 @@ class SOSDetector(private val assetManager: AssetManager) {
         val means  = scalerParams.mean
         val scales = scalerParams.scale
 
-        // Normalize: (raw - mean) * scale  [MULTIPLY — not divide]
+        // Normalize: (raw - mean) / scale
         val normalized = FloatArray(FEATURE_COUNT) { i ->
-            (rawFeatures[i] - means[i]) * scales[i]
+            val scale = scales[i]
+            if (scale == 0f) 0f else (rawFeatures[i] - means[i]) / scale
         }
 
         return try {
