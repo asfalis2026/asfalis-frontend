@@ -55,8 +55,14 @@ class AuthViewModel(
                     _uiState.value = AuthUiState(isSuccess = true)
                 }
                 is NetworkResult.Error -> {
-                    // If phone not verified, surface the phone number so UI navigates to OTP
-                    if (result.code == "PHONE_NOT_VERIFIED") {
+                    // If phone not verified, surface the phone number so UI navigates to OTP.
+                    // Check both the explicit error code AND the human-readable message from the
+                    // backend — the 403 response may come back as either format.
+                    val isPhoneUnverified = result.code == "PHONE_NOT_VERIFIED" ||
+                        result.message.contains("verify", ignoreCase = true) ||
+                        result.message.contains("not verified", ignoreCase = true)
+
+                    if (isPhoneUnverified) {
                         _uiState.value = AuthUiState(unverifiedPhone = phoneNumber)
                     } else if (
                         result.code == "HANDSET_CHANGE_PENDING" ||

@@ -38,7 +38,11 @@ class DashboardViewModel : ViewModel() {
     private val _shakeSensitivity = MutableStateFlow("medium")
     val shakeSensitivity: StateFlow<String> = _shakeSensitivity
 
-    /** True when protection is armed — sensors run whenever the shield is armed. */
+    /** Whether auto_sos_enabled is true in the user's settings. */
+    private val _autoSosEnabled = MutableStateFlow(true) // default true so monitoring starts
+    val autoSosEnabled: StateFlow<Boolean> = _autoSosEnabled
+
+    /** True when protection is armed AND autoSos is enabled. */
     private val _autoSosMonitoring = MutableStateFlow(false)
     val autoSosMonitoring: StateFlow<Boolean> = _autoSosMonitoring
 
@@ -66,23 +70,28 @@ class DashboardViewModel : ViewModel() {
     }
 
     fun loadProtectionStatus() {
+        // Use a shared atomic to avoid the race: whichever coroutine finishes last
+        // will compute the correct combined monitoring flag using both values.
         viewModelScope.launch {
             try {
                 val response = protectionApi.getProtectionStatus()
                 if (response.isSuccessful && response.body()?.success == true) {
                     val active = response.body()?.data?.isActive ?: _isProtectionActive.value
                     _isProtectionActive.value = active
-                    // Explicitly sync autoSosMonitoring with the loaded state
-                    _autoSosMonitoring.value = active
+                    // Recompute with whichever autoSosEnabled value we have so far
+                    _autoSosMonitoring.value = active && _autoSosEnabled.value
                 }
-            } catch (e: Exception) {
-                // Ignore — use local state
-            }
+            } catch (e: Exception) { /* Ignore — use local state */ }
         }
-        // Load shake_sensitivity for AutoSosManager threshold
         viewModelScope.launch {
             when (val result = settingsRepository.getSettings()) {
-                is NetworkResult.Success -> _shakeSensitivity.value = result.data.shakeSensitivity
+                is NetworkResult.Success -> {
+                    _shakeSensitivity.value = result.data.shakeSensitivity
+                    val autoEnabled = result.data.autoSosEnabled
+                    _autoSosEnabled.value = autoEnabled
+                    // Recompute using the now-confirmed protection state
+                    _autoSosMonitoring.value = _isProtectionActive.value && autoEnabled
+                }
                 else -> Unit
             }
         }
@@ -95,17 +104,14 @@ class DashboardViewModel : ViewModel() {
                 if (response.isSuccessful && response.body()?.success == true) {
                     val confirmedActive = response.body()?.data?.isActive ?: isActive
                     _isProtectionActive.value = confirmedActive
-                    // Only update autoSosMonitoring here, not via a collect{} observer,
-                    // to prevent the shield from flickering on cold start.
-                    _autoSosMonitoring.value = confirmedActive
+                    _autoSosMonitoring.value = confirmedActive && _autoSosEnabled.value
                 } else {
-                    // Optimistic update on API failure
                     _isProtectionActive.value = isActive
-                    _autoSosMonitoring.value = isActive
+                    _autoSosMonitoring.value = isActive && _autoSosEnabled.value
                 }
             } catch (e: Exception) {
                 _isProtectionActive.value = isActive
-                _autoSosMonitoring.value = isActive
+                _autoSosMonitoring.value = isActive && _autoSosEnabled.value
             }
             // Sync auto_sos_enabled to backend so POST /predict requests are accepted.
             try {

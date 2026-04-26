@@ -7,6 +7,7 @@ import com.yourname.womensafety.data.AppServiceLocator
 import com.yourname.womensafety.data.local.TokenManager
 import com.yourname.womensafety.data.repository.AuthRepository
 import com.yourname.womensafety.data.repository.NetworkResult
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -26,13 +27,13 @@ class SplashViewModel(
 
     fun resolveStartDestination() {
         viewModelScope.launch {
+            // Ensure DataStore has time to settle during cold start
+            delay(500)
+
             val onboardingDone = tokenManager.isOnboardingComplete().first()
             val permissionsGranted = tokenManager.arePermissionsGranted().first()
             val loggedIn = tokenManager.isLoggedIn().first()
 
-            // Navigate immediately based on local DataStore state — do NOT block on
-            // a network call during splash. Render cold-start can take 10-30 seconds
-            // which would leave the user stuck on the splash screen.
             val route = when {
                 !onboardingDone     -> "onboarding"
                 !permissionsGranted -> "permissions"
@@ -41,21 +42,17 @@ class SplashViewModel(
             }
             _destination.value = SplashDestination(route)
 
-            // Silently validate the token in the background AFTER navigating.
-            // If the token is truly expired/invalid, AuthInterceptor will catch the
-            // 401 on the first real API call and trigger SessionManager.onSessionExpired()
-            // which forces the user back to login gracefully.
             if (loggedIn) {
                 try {
                     val result = authRepository.validateToken()
                     if (result is NetworkResult.Error &&
                         (result.code == "UNAUTHORIZED" || result.code == "TOKEN_INVALID")) {
                         tokenManager.clearTokens()
+                        // Only trigger global session expiration if we were actually authenticated
                         com.yourname.womensafety.data.SessionManager.onSessionExpired()
                     }
                 } catch (_: Exception) {
                     // Network error during background validation — keep user logged in.
-                    // The AuthInterceptor will handle any real auth failures on subsequent calls.
                 }
             }
         }

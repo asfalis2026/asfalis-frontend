@@ -93,7 +93,15 @@ class TokenManager(private val context: Context) {
     }
 
     // --- LOGOUT ---
-    suspend fun clearTokens() {
+    /**
+     * Clears auth tokens from DataStore.
+     *
+     * @param isFullLogout If true (explicit user-initiated logout), also clears the
+     *   onboarding and permissions flags so the next login correctly goes through
+     *   the full setup flow. If false (token refresh failure), only auth tokens are
+     *   cleared — the user keeps their onboarding state.
+     */
+    suspend fun clearTokens(isFullLogout: Boolean = false) {
         context.dataStore.edit { prefs ->
             prefs.remove(ACCESS_TOKEN)
             prefs.remove(REFRESH_TOKEN)
@@ -101,6 +109,13 @@ class TokenManager(private val context: Context) {
             prefs.remove(TOKEN_EXPIRES_AT)
             prefs.remove(USER_ID)
             prefs[IS_LOGGED_IN] = false
+            // Only wipe onboarding/permissions on explicit logout.
+            // Do NOT clear these on token refresh failure — we don't want to
+            // force the user through onboarding again just because their token expired.
+            if (isFullLogout) {
+                prefs.remove(ONBOARDING_COMPLETE)
+                prefs.remove(PERMISSIONS_GRANTED)
+            }
         }
     }
 

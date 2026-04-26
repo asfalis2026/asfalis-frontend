@@ -44,21 +44,39 @@ sealed class IotAction {
 }
 
 /**
+ * Commands dispatched from the App to the Wearable (hardware team patch).
+ */
+sealed class IotCommand {
+    /** Tells the wearable to trigger its motor and LED (haptic feedback). */
+    data object TriggerFeedback : IotCommand()
+}
+
+/**
  * App-wide event bus that lets [IotWearableService] notify the UI layer
  * about IoT button-press outcomes without a direct reference to any Activity
  * or Composable.
  *
  * Collect [events] in [AppNavGraph] to drive navigation and feedback.
+ * Collect [commands] in [IotWearableManager] to send commands to the wearable.
  */
 object IotEventBus {
 
     private val _events = MutableSharedFlow<IotAction>(extraBufferCapacity = 1)
+    private val _commands = MutableSharedFlow<IotCommand>(extraBufferCapacity = 4)
 
     /** Observe this flow in AppNavGraph. */
     val events: SharedFlow<IotAction> = _events
 
+    /** Observe this flow in IotWearableManager to receive commands to send to the wearable. */
+    val commands: SharedFlow<IotCommand> = _commands
+
     /** Thread-safe. Can be called from any coroutine / background thread. */
     fun post(action: IotAction) {
         _events.tryEmit(action)
+    }
+
+    /** Thread-safe. Send commands from the UI/ViewModels to the connected wearable. */
+    fun sendCommand(command: IotCommand) {
+        _commands.tryEmit(command)
     }
 }
