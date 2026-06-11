@@ -1,13 +1,13 @@
 package com.yourname.womensafety.ui.viewmodels
 
 import android.app.Application
-import android.content.Context
-import android.hardware.SensorManager
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.yourname.womensafety.data.AppServiceLocator
+import android.content.Intent
 import com.yourname.womensafety.data.AutoSosManager
+import com.yourname.womensafety.service.SafetyForegroundService
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -15,33 +15,35 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
- * AutoSosViewModel — owns [AutoSosManager] and orchestrates the Auto SOS pipeline.
+ * AutoSosViewModel — orchestrates the Auto SOS pipeline.
  *
- * Usage from DashboardScreen:
- *  1. Call [setActive] whenever the protection toggle changes.
- *  2. Collect [dangerDetected] to navigate to the SOS countdown screen.
- *  3. Call [onAlertResolved] once the SOS alert has been cancelled or sent to
- *     reset the cooldown so monitoring can resume.
+ * ## Architecture change (Foreground Service)
+ * The [com.yourname.womensafety.data.AutoSosManager] previously lived here,
+ * which meant the sensor engine was destroyed whenever the Dashboard Composable
+ * left the backstack (tab navigation) or the screen was locked.
+ *
+ * Now [AutoSosManager] lives inside [SafetyForegroundService] which:
+ *   - Survives tab navigation (UI lifecycle changes)
+ *   - Keeps sensors alive with a WakeLock when the screen is locked
+ *
+ * This ViewModel's only job is:
+ *   1. Send Intents to start/stop [SafetyForegroundService]
+ *   2. Collect events from [SafetyForegroundService]'s companion-object StateFlows
+ *      and re-expose them to the UI
  */
-class AutoSosViewModel(app: Application) : AndroidViewModel(app) {
+class AutoSosViewModel(private val app: Application) : AndroidViewModel(app) {
 
-    private val sensorManager =
-        app.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-
-    private val autoSosManager = AutoSosManager(
-        context = app.applicationContext,
-        sensorManager = sensorManager,
-        protectionRepository = AppServiceLocator.protectionRepository,
-        scope = viewModelScope
-    )
-
-    /** True while sensor monitoring is active. */
+    /** True while sensor monitoring is active (mirrors service running state). */
     private val _isActive = MutableStateFlow(false)
     val isActive: StateFlow<Boolean> = _isActive
 
+    val bufferProgress: StateFlow<Float> = SafetyForegroundService.bufferProgress
+    val modelStatus = SafetyForegroundService.modelStatus
+    val currentWindowIndex: StateFlow<Int> = SafetyForegroundService.currentWindowIndex
+
     // Track current params to detect restarts needed by sensitivity changes
     private var currentSensitivity = ""
-    private var currentSensorType = ""
+    private var currentSensorType  = ""
 
     /**
      * Emits a [AutoSosManager.DangerEvent] whenever the ML model predicts danger.
@@ -51,31 +53,37 @@ class AutoSosViewModel(app: Application) : AndroidViewModel(app) {
     val dangerDetected: SharedFlow<AutoSosManager.DangerEvent> = _dangerDetected
 
     /**
-     * Emits Unit when the 10-minute post-trigger cooldown begins.
+     * Emits Unit when the post-trigger cooldown begins.
      * Collect this in the UI to show a Toast informing the user.
      */
     private val _cooldownStarted = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val cooldownStarted: SharedFlow<Unit> = _cooldownStarted
 
     init {
-        // Forward events from the manager to the ViewModel's own SharedFlows
+        // Forward global service events into this ViewModel's own SharedFlows for the UI
         viewModelScope.launch {
-            autoSosManager.dangerDetected.collect { event ->
+            SafetyForegroundService.dangerDetected.collect { event ->
                 _dangerDetected.emit(event)
             }
         }
         viewModelScope.launch {
-            autoSosManager.cooldownStarted.collect {
+            SafetyForegroundService.cooldownStarted.collect {
                 _cooldownStarted.emit(Unit)
+            }
+        }
+        // Mirror the service's running state so the Dashboard dot indicator stays correct
+        viewModelScope.launch {
+            SafetyForegroundService.isRunning.collect { running ->
+                _isActive.value = running
             }
         }
     }
 
     /**
      * Enable or disable sensor monitoring.
-     * Always restarts if sensitivity or sensorType changes while active.
+     * Starts or stops [SafetyForegroundService] via an explicit Intent.
      *
-     * @param active     Whether to start or stop monitoring.
+     * @param active      Whether to start or stop monitoring.
      * @param sensitivity "low" | "medium" | "high" — determines magnitude threshold.
      * @param sensorType  "accelerometer" | "gyroscope"
      */
@@ -84,39 +92,40 @@ class AutoSosViewModel(app: Application) : AndroidViewModel(app) {
         if (_isActive.value == active && !paramsChanged) return
 
         currentSensitivity = sensitivity
-        currentSensorType = sensorType
-        _isActive.value = active
+        currentSensorType  = sensorType
 
-        // Always stop first to cleanly unregister the previous sensor listener
-        autoSosManager.stop()
+        val intent = Intent(app, SafetyForegroundService::class.java)
         if (active) {
-            autoSosManager.start(sensitivity, sensorType)
+            intent.action = SafetyForegroundService.ACTION_START
+            intent.putExtra(SafetyForegroundService.EXTRA_SENSITIVITY, sensitivity)
+            intent.putExtra(SafetyForegroundService.EXTRA_SENSOR_TYPE, sensorType)
+            // startForegroundService ensures the service can call startForeground() within 5 seconds
+            ContextCompat.startForegroundService(app, intent)
+        } else {
+            intent.action = SafetyForegroundService.ACTION_STOP
+            app.startService(intent)
         }
     }
 
     /**
-     * Call this after the SOS alert triggered by Auto SOS has been resolved
-     * (cancelled or dispatched). Resets the internal 20-second cooldown so
-     * monitoring can continue normally.
+     * Call this after the SOS alert has been resolved (cancelled or dispatched).
+     * The service's internal cooldown handles reset; nothing extra needed here
+     * unless the service exposes a notifySosResolved API in the future.
      */
     fun onAlertResolved() {
-        autoSosManager.notifySosResolved()
+        // The AutoSosManager inside the service handles cooldown internally.
+        // No action needed here currently.
     }
 
     override fun onCleared() {
         super.onCleared()
-        autoSosManager.stop()
+        // Do NOT stop the service here — it must survive ViewModel lifecycle changes
+        // (e.g. configuration change, tab navigation). The service is stopped only
+        // when the user explicitly disarms protection via setActive(false).
     }
 
     companion object {
-        val Factory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-                // AndroidViewModel requires Application — use the standard factory pattern
-                throw UnsupportedOperationException(
-                    "Use ViewModelProvider(owner, ViewModelProvider.AndroidViewModelFactory.getInstance(app))"
-                )
-            }
-        }
+        fun factory(app: Application): ViewModelProvider.Factory =
+            ViewModelProvider.AndroidViewModelFactory.getInstance(app)
     }
 }

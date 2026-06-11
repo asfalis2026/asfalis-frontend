@@ -14,7 +14,7 @@ interface SosApiService {
     @POST("sos/send-now")
     suspend fun sendSosNow(
         @Body request: SosSendNowRequest
-    ): Response<ApiResponse<Unit>>   // backend returns delivery_report, not data
+    ): Response<ApiResponse<SosSendNowData>>
 
     @POST("sos/cancel")
     suspend fun cancelSos(
@@ -28,4 +28,14 @@ interface SosApiService {
 
     @GET("sos/history")
     suspend fun getSosHistory(): Response<ApiResponse<List<SosHistoryItem>>>
+
+    @GET("sos/countdown/{alertId}")
+    suspend fun getSosCountdown(
+        @Path("alertId") alertId: String
+    ): Response<ApiResponse<SosCountdownData>>
+
+    @POST("sos/test-whatsapp")
+    suspend fun testWhatsApp(
+        @Body request: TestWhatsAppRequest
+    ): Response<ApiResponse<Unit>>
 }

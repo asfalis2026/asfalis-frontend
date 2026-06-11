@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import com.yourname.womensafety.utils.trNonComposable
 
 data class HandsetTransferUiState(
     val phoneNumber: String,
@@ -51,12 +52,19 @@ class AuthViewModel(
             _uiState.value = AuthUiState(isLoading = true)
             when (val result = authRepository.loginWithPhone(phoneNumber, password)) {
                 is NetworkResult.Success -> {
-                    fetchSecurityPolicy()
+                    // Navigate IMMEDIATELY — fetch security policy in background (non-blocking)
                     _uiState.value = AuthUiState(isSuccess = true)
+                    launch { fetchSecurityPolicy() }
                 }
                 is NetworkResult.Error -> {
-                    // If phone not verified, surface the phone number so UI navigates to OTP
-                    if (result.code == "PHONE_NOT_VERIFIED") {
+                    // If phone not verified, surface the phone number so UI navigates to OTP.
+                    // Check both the explicit error code AND the human-readable message from the
+                    // backend — the 403 response may come back as either format.
+                    val isPhoneUnverified = result.code == "PHONE_NOT_VERIFIED" ||
+                        result.message.contains("verify", ignoreCase = true) ||
+                        result.message.contains("not verified", ignoreCase = true)
+
+                    if (isPhoneUnverified) {
                         _uiState.value = AuthUiState(unverifiedPhone = phoneNumber)
                     } else if (
                         result.code == "HANDSET_CHANGE_PENDING" ||
@@ -66,9 +74,19 @@ class AuthViewModel(
                         _uiState.value = AuthUiState(handsetTransfer = transferState)
                     } else {
                         val friendlyMessage = when (result.code) {
-                            "PHONE_NOT_VERIFIED" -> "Please verify your phone number first."
-                            "UNAUTHORIZED"       -> "Invalid phone number or password."
-                            "RATE_LIMITED"       -> "Too many attempts. Try again later."
+                            "PHONE_NOT_VERIFIED" -> "Please verify your phone number first.".trNonComposable()
+                            "UNAUTHORIZED", "HTTP_401" -> {
+                                if (result.attemptsRemaining != null) {
+                                    "${result.attemptsRemaining} attempts left after that app will lock for 30 minutes."
+                                } else {
+                                    "Invalid phone number or password."
+                                }
+                            }
+                            "ACCOUNT_LOCKED", "HTTP_423" -> {
+                                "App is locked try again after 30 minutes."
+                            }
+                            "RATE_LIMITED", "HTTP_429" -> "Too many requests, please slow down and try again later.".trNonComposable()
+                            "WEAK_PASSWORD"      -> "Password must be at least 8 characters with uppercase, lowercase, and digit.".trNonComposable()
                             else                 -> result.message
                         }
                         _uiState.value = AuthUiState(errorMessage = friendlyMessage)
@@ -86,14 +104,15 @@ class AuthViewModel(
             when (val result = authRepository.registerWithPhone(name, phoneNumber, password, country)) {
                 is NetworkResult.Success -> {
                     // Twilio has sent the OTP SMS — navigate to OTP screen
-                    _uiState.value = AuthUiState(registeredPhone = result.data.phoneNumber)
+                    _uiState.value = AuthUiState(registeredPhone = phoneNumber)
                 }
                 is NetworkResult.Error -> {
                     val friendlyMessage = when (result.code) {
-                        "CONFLICT"          -> "This phone number is already registered. Try logging in."
-                        "VALIDATION_ERROR"  -> "Please check your details and try again."
-                        "RATE_LIMITED"      -> "Too many attempts. Try again later."
-                        else                 -> result.message
+                        "CONFLICT"          -> "This phone number is already registered. Try logging in.".trNonComposable()
+                        "VALIDATION_ERROR"  -> "Please check your details and try again.".trNonComposable()
+                        "RATE_LIMITED", "HTTP_429" -> "Too many requests, please slow down and try again later.".trNonComposable()
+                        "WEAK_PASSWORD"     -> "Password must be at least 8 characters with uppercase, lowercase, and digit.".trNonComposable()
+                        else                -> result.message
                     }
                     _uiState.value = AuthUiState(errorMessage = friendlyMessage)
                 }
@@ -108,13 +127,13 @@ class AuthViewModel(
             _uiState.value = AuthUiState(isLoading = true)
             when (val result = authRepository.verifyPhoneOtp(phoneNumber, otpCode)) {
                 is NetworkResult.Success -> {
-                    fetchSecurityPolicy()
                     _uiState.value = AuthUiState(isSuccess = true)
+                    launch { fetchSecurityPolicy() }
                 }
                 is NetworkResult.Error -> {
                     val friendlyMessage = when (result.code) {
-                        "OTP_INVALID"      -> "Incorrect or expired OTP. Try again."
-                        "ALREADY_VERIFIED" -> "Your number is already verified. Please log in."
+                        "OTP_INVALID"      -> "Incorrect or expired OTP. Try again.".trNonComposable()
+                        "ALREADY_VERIFIED" -> "Your number is already verified. Please log in.".trNonComposable()
                         else               -> result.message
                     }
                     _uiState.value = AuthUiState(errorMessage = friendlyMessage)
@@ -138,8 +157,8 @@ class AuthViewModel(
                 }
                 is NetworkResult.Error -> {
                     val friendlyMessage = when (result.code) {
-                        "RATE_LIMITED"      -> "Too many attempts. Please wait and try again."
-                        "ALREADY_VERIFIED"  -> "Your number is already verified. Please log in."
+                        "RATE_LIMITED", "HTTP_429" -> "Too many requests, please slow down and try again later.".trNonComposable()
+                        "ALREADY_VERIFIED"  -> "Your number is already verified. Please log in.".trNonComposable()
                         else                -> result.message
                     }
                     _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = friendlyMessage)
@@ -172,9 +191,11 @@ class AuthViewModel(
                 is NetworkResult.Success -> _uiState.value = AuthUiState(isSuccess = true)
                 is NetworkResult.Error -> {
                     val friendlyMessage = when (result.code) {
-                        "OTP_INVALID"      -> "Incorrect or expired code. Try again."
-                        "NOT_FOUND"        -> "Phone number not found."
-                        "VALIDATION_ERROR" -> "Password is too weak. Use at least 8 characters."
+                        "OTP_INVALID"      -> "Incorrect or expired code. Try again.".trNonComposable()
+                        "NOT_FOUND"        -> "Phone number not found.".trNonComposable()
+                        "VALIDATION_ERROR" -> "Password is too weak. Use at least 8 characters.".trNonComposable()
+                        "WEAK_PASSWORD"    -> "Password must be at least 8 characters with uppercase, lowercase, and digit.".trNonComposable()
+                        "RATE_LIMITED", "HTTP_429" -> "Too many requests, please slow down and try again later.".trNonComposable()
                         else               -> result.message
                     }
                     _uiState.value = AuthUiState(errorMessage = friendlyMessage)
@@ -204,8 +225,8 @@ class AuthViewModel(
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
             when (val result = authRepository.loginWithPhone(phoneNumber, password, confirmHandover = true)) {
                 is NetworkResult.Success -> {
-                    fetchSecurityPolicy()
                     _uiState.value = AuthUiState(isSuccess = true)
+                    launch { fetchSecurityPolicy() }
                 }
                 is NetworkResult.Error -> {
                     if (result.code == "HANDSET_CHANGE_PENDING" || result.code == "HANDSET_CHANGE_CONFIRMATION_REQUIRED") {

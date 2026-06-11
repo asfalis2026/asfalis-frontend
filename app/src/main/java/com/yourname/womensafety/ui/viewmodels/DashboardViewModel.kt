@@ -11,9 +11,11 @@ import com.yourname.womensafety.data.network.api.ProtectionApiService
 import com.yourname.womensafety.data.repository.NetworkResult
 import com.yourname.womensafety.data.repository.SettingsRepository
 import com.yourname.womensafety.data.repository.UserRepository
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import com.google.firebase.messaging.FirebaseMessaging
 
 class DashboardViewModel : ViewModel() {
 
@@ -37,71 +39,140 @@ class DashboardViewModel : ViewModel() {
     private val _shakeSensitivity = MutableStateFlow("medium")
     val shakeSensitivity: StateFlow<String> = _shakeSensitivity
 
-    /** True when protection is armed — sensors run whenever the shield is armed. */
+    /** Whether auto_sos_enabled is true in the user's settings. */
+    private val _autoSosEnabled = MutableStateFlow(true)
+    val autoSosEnabled: StateFlow<Boolean> = _autoSosEnabled
+
+    /** True when protection is armed AND autoSos is enabled. */
     private val _autoSosMonitoring = MutableStateFlow(false)
     val autoSosMonitoring: StateFlow<Boolean> = _autoSosMonitoring
 
     init {
-        // _autoSosMonitoring mirrors _isProtectionActive directly.
-        // The backend guards /predict with auto_sos_enabled, and we sync that flag
-        // via PUT /api/settings every time the shield is toggled.
+        // Pre-fill greeting name from DataStore immediately so the UI renders
+        // Pre-fill greeting name from DataStore on construction so the first
+        // rendered frame already has the real name — eliminates the flash of
+        // "Good evening Asfalis" that occurred before LaunchedEffect ran.
         viewModelScope.launch {
-            _isProtectionActive.collect { active ->
-                _autoSosMonitoring.value = active
-            }
+            val cached = userRepository.getCachedUserName()
+            if (!cached.isNullOrEmpty() && _userName.value == null)
+                _userName.value = cached
         }
+
+        // Sync FCM token on app launch (best-effort, non-blocking)
+        try {
+            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    val token = task.result
+                    if (!token.isNullOrEmpty()) {
+                        viewModelScope.launch {
+                            try { userRepository.updateFcmToken(token) } catch (_: Exception) {}
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
     }
 
+    /**
+     * Loads protection status and settings.
+     * Uses cache-first for instant load: reads cached settings immediately,
+     * then fires both API calls in parallel as a background refresh.
+     */
     fun loadProtectionStatus() {
         viewModelScope.launch {
-            try {
-                val response = protectionApi.getProtectionStatus()
-                if (response.isSuccessful && response.body()?.success == true) {
-                    _isProtectionActive.value = response.body()?.data?.isActive ?: _isProtectionActive.value
-                }
-            } catch (e: Exception) {
-                // Ignore — use local state
+            // ── Step 1: Apply cached settings immediately (instant, <10ms) ──
+            settingsRepository.getCachedSettings()?.let { cached ->
+                _shakeSensitivity.value = cached.shakeSensitivity
+                _autoSosEnabled.value   = cached.autoSosEnabled
             }
-        }
-        // Load shake_sensitivity for AutoSosManager threshold
-        viewModelScope.launch {
-            when (val result = settingsRepository.getSettings()) {
-                is NetworkResult.Success -> _shakeSensitivity.value = result.data.shakeSensitivity
-                else -> Unit
+
+            // ── Step 2: Fire both network calls IN PARALLEL ───────────────
+            val protectionDeferred = async {
+                try {
+                    val response = protectionApi.getProtectionStatus()
+                    if (response.isSuccessful && response.body()?.success == true) {
+                        response.body()?.data?.isActive
+                    } else null
+                } catch (e: Exception) { null }
             }
+            val settingsDeferred = async {
+                try {
+                    when (val result = settingsRepository.getSettings()) {
+                        is NetworkResult.Success -> result.data
+                        else -> null
+                    }
+                } catch (e: Exception) { null }
+            }
+
+            // ── Step 3: Apply results as they resolve ─────────────────────
+            val activeFromNetwork = protectionDeferred.await()
+            if (activeFromNetwork != null) {
+                _isProtectionActive.value = activeFromNetwork
+            }
+
+            val settingsFromNetwork = settingsDeferred.await()
+            if (settingsFromNetwork != null) {
+                _shakeSensitivity.value = settingsFromNetwork.shakeSensitivity
+                _autoSosEnabled.value   = settingsFromNetwork.autoSosEnabled
+            }
+
+            // Compute combined monitoring flag with latest values
+            _autoSosMonitoring.value =
+                _isProtectionActive.value && _autoSosEnabled.value
         }
     }
 
     fun toggleProtection(isActive: Boolean) {
+        // OPTIMISTIC UPDATE — flip state immediately so the UI feels instant.
+        // The network call runs in background and only corrects the value if the
+        // server disagrees (which should be rare).
+        _isProtectionActive.value = isActive
+        _autoSosMonitoring.value  = isActive && _autoSosEnabled.value
+
         viewModelScope.launch {
             try {
                 val response = protectionApi.toggleProtection(ToggleProtectionRequest(isActive))
                 if (response.isSuccessful && response.body()?.success == true) {
-                    _isProtectionActive.value = response.body()?.data?.isActive ?: isActive
-                } else {
-                    _isProtectionActive.value = isActive
+                    val confirmed = response.body()?.data?.isActive ?: isActive
+                    if (confirmed != _isProtectionActive.value) {   // server disagreed
+                        _isProtectionActive.value = confirmed
+                        _autoSosMonitoring.value  = confirmed && _autoSosEnabled.value
+                    }
                 }
-            } catch (e: Exception) {
-                _isProtectionActive.value = isActive
-            }
-            // Sync auto_sos_enabled to backend so POST /predict requests are accepted.
-            // Best-effort — the backend also guards the endpoint, so a failure here
-            // just means the ML prediction will return the "not enabled" soft response.
-            try {
-                settingsRepository.updateSettings(
-                    UpdateSettingsRequest(autoSosEnabled = _isProtectionActive.value)
-                )
-            } catch (e: Exception) { /* ignore */ }
+            } catch (_: Exception) { /* keep optimistic value on network failure */ }
         }
     }
 
+    /** Reload settings from cache (e.g. when resuming from SettingsScreen) */
+    fun refreshSettings() {
+        viewModelScope.launch {
+            settingsRepository.getCachedSettings()?.let { cached ->
+                _shakeSensitivity.value = cached.shakeSensitivity
+                _autoSosEnabled.value   = cached.autoSosEnabled
+                _autoSosMonitoring.value = _isProtectionActive.value && _autoSosEnabled.value
+            }
+        }
+    }
+
+    /**
+     * Loads the greeting name.
+     * Cache-first: reads persisted user name from DataStore immediately (no flicker),
+     * then refreshes from the network in the background.
+     */
     fun loadGreeting() {
         viewModelScope.launch {
+            // Step 1: Read cached name instantly (persisted across app restarts)
+            val cachedName = userRepository.getCachedUserName()
+            if (!cachedName.isNullOrEmpty()) {
+                _userName.value = cachedName
+            }
+
+            // Step 2: Background refresh from network
             when (val result = userRepository.getProfile()) {
                 is NetworkResult.Success -> {
                     _userName.value = result.data.fullName.split(" ").firstOrNull()
                 }
-                else -> Unit
+                else -> Unit  // Keep cached value if network fails
             }
         }
     }

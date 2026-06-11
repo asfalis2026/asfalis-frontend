@@ -18,7 +18,11 @@ data class ApiResponse<T>(
     // user.py nested error object
     @SerializedName("error")      val error: ApiError? = null,
     // auth.py flat error code
-    @SerializedName("error_code") val errorCode: String? = null
+    @SerializedName("error_code") val errorCode: String? = null,
+    // lock/rate limiting
+    @SerializedName("attempts_remaining") val attemptsRemaining: Int? = null,
+    @SerializedName("locked_until")       val lockedUntil: String? = null,
+    @SerializedName("seconds_remaining")  val secondsRemaining: Int? = null
 ) {
     /** True for both `success: true` and `status: "success"`. */
     val isSuccess: Boolean get() = success == true || status == "success"

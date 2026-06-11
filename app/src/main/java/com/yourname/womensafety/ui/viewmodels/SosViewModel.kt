@@ -4,66 +4,206 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import com.yourname.womensafety.data.AppServiceLocator
+import com.yourname.womensafety.data.IotCommand
+import com.yourname.womensafety.data.IotEventBus
 import com.yourname.womensafety.data.IotSosTracker
 import com.yourname.womensafety.data.repository.NetworkResult
 import com.yourname.womensafety.data.repository.ProtectionRepository
+import com.yourname.womensafety.data.repository.SettingsRepository
 import com.yourname.womensafety.data.repository.SosRepository
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import com.yourname.womensafety.utils.trNonComposable
 
 data class SosUiState(
     val alertId: String? = null,
+    /** True while the initial POST /sos/trigger is in-flight. Countdown waits until false. */
+    val isTriggering: Boolean = false,
     val isSending: Boolean = false,
     val isSent: Boolean = false,
     val isCancelled: Boolean = false,
     /** True while the cancelSos / markUserSafe API call is in-flight. */
     val isCancelling: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    /**
+     * True when the trigger has been in-flight for more than [TRIGGER_TIMEOUT_MS].
+     * In this state the UI should always unlock the "I'M SAFE" cancel button so
+     * the user is never trapped on the SOS screen.
+     */
+    val isConnectionTimeout: Boolean = false,
+    val contacts: List<com.yourname.womensafety.data.network.dto.TrustedContact> = emptyList(),
+    val countdownSeconds: Int? = null,
+    val secondsRemaining: Float? = null,
+    /** Per-contact delivery report from the sendNow API response. Keyed by phone number. */
+    val deliveryReport: List<com.yourname.womensafety.data.network.dto.SosDeliveryReport> = emptyList()
 )
 
 class SosViewModel(
     private val sosRepository: SosRepository,
-    private val protectionRepository: ProtectionRepository = AppServiceLocator.protectionRepository
+    private val protectionRepository: ProtectionRepository = AppServiceLocator.protectionRepository,
+    private val settingsRepository: SettingsRepository = AppServiceLocator.settingsRepository,
+    private val contactsRepository: com.yourname.womensafety.data.repository.ContactsRepository = AppServiceLocator.contactsRepository
 ) : ViewModel() {
+
+    companion object {
+        /**
+         * After this many ms of isTriggering=true, unlock the cancel button.
+         * Must be > BaseRepository max retry window (3 retries × ~30s = ~90s).
+         */
+        private const val TRIGGER_TIMEOUT_MS = 95_000L
+
+        val Factory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                return SosViewModel(AppServiceLocator.sosRepository) as T
+            }
+        }
+    }
 
     private val _uiState = MutableStateFlow(SosUiState())
     val uiState: StateFlow<SosUiState> = _uiState
 
-    fun triggerSos(latitude: Double, longitude: Double, triggerType: String = "manual") {
-        Log.d("SosViewModel", "triggerSos called: lat=$latitude, lng=$longitude, type=$triggerType")
+    init {
+        loadContacts()
+    }
+
+    private fun loadContacts() {
         viewModelScope.launch {
-            when (val result = sosRepository.triggerSos(triggerType, latitude, longitude)) {
+            val cached = contactsRepository.getCachedContacts()
+            if (cached != null) {
+                _uiState.value = _uiState.value.copy(contacts = cached.sortedByDescending { it.isPrimary }.take(3))
+            } else {
+                val result = contactsRepository.getContacts()
+                if (result is NetworkResult.Success) {
+                    _uiState.value = _uiState.value.copy(contacts = result.data.sortedByDescending { it.isPrimary }.take(3))
+                }
+            }
+        }
+    }
+
+    /** Reference to the in-flight triggerSos coroutine — used by abortTrigger(). */
+    private var triggerJob: Job? = null
+
+    /** Reference to the 8-second timeout watchdog coroutine. */
+    private var timeoutJob: Job? = null
+
+    /** Reference to the polling job for countdown status. */
+    private var pollJob: Job? = null
+
+    fun triggerSos(triggerType: String = "manual") {
+        Log.d("SosViewModel", "triggerSos called: type=$triggerType")
+        // Cancel any previously in-flight trigger before starting a new one
+        triggerJob?.cancel()
+        timeoutJob?.cancel()
+
+        _uiState.value = _uiState.value.copy(isTriggering = true)
+
+        // Watchdog: if trigger hasn't resolved within the retry window, unlock cancel
+        timeoutJob = viewModelScope.launch {
+            delay(TRIGGER_TIMEOUT_MS)
+            if (_uiState.value.isTriggering) {
+                Log.w("SosViewModel", "SOS trigger timed out after ${TRIGGER_TIMEOUT_MS}ms — unlocking cancel")
+                _uiState.value = _uiState.value.copy(isConnectionTimeout = true)
+            }
+        }
+
+        triggerJob = viewModelScope.launch {
+            // Fetch location first — survives UI recomposition / navigation
+            var lat = 0.0
+            var lng = 0.0
+            try {
+                val fusedClient = LocationServices.getFusedLocationProviderClient(AppServiceLocator.application)
+                val cts = CancellationTokenSource()
+                val location = suspendCancellableCoroutine { cont ->
+                    fusedClient.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, cts.token)
+                        .addOnSuccessListener { loc -> cont.resume(loc) }
+                        .addOnFailureListener { cont.resume(null) }
+                    cont.invokeOnCancellation { cts.cancel() }
+                }
+                lat = location?.latitude ?: 0.0
+                lng = location?.longitude ?: 0.0
+            } catch (e: Exception) {
+                Log.w("SosViewModel", "Location fetch failed: ${e.message}")
+            }
+
+            Log.d("SosViewModel", "Location fetched: lat=$lat, lng=$lng")
+
+            // Read the custom SOS message from cached settings so the backend
+            // receives it directly in the trigger payload — no DB lookup needed.
+            val cachedSosMessage = settingsRepository.getCachedSettings()?.sosMessage
+                ?.takeIf { it.isNotBlank() }
+
+            when (val result = sosRepository.triggerSos(triggerType, lat, lng, sosMessage = cachedSosMessage)) {
                 is NetworkResult.Success -> {
                     Log.d("SosViewModel", "triggerSos success: alertId=${result.data.alertId}")
+                    timeoutJob?.cancel()
                     val serverStatus = result.data.status.lowercase()
                     val alreadySent = serverStatus == "sent" || serverStatus == "dispatched"
                     IotSosTracker.onUiAlertCreated(result.data.alertId)
                     if (alreadySent) IotSosTracker.onAlertDispatched(result.data.alertId)
-                    _uiState.value = SosUiState(
+                    _uiState.value = _uiState.value.copy(
                         alertId = result.data.alertId,
-                        isSent = alreadySent
+                        isTriggering = false,
+                        isConnectionTimeout = false,
+                        isSent = alreadySent,
+                        countdownSeconds = result.data.countdownSeconds,
+                        secondsRemaining = result.data.countdownSeconds?.toFloat()
                     )
+                    if (!alreadySent && result.data.alertId != null) {
+                        startPolling(result.data.alertId)
+                    }
+                    // Hardware team patch: vibrate & blink the bracelet immediately
+                    // on every successful SOS trigger (manual, IoT button, auto-fall, proximity)
+                    IotEventBus.sendCommand(IotCommand.TriggerFeedback)
                 }
                 is NetworkResult.Error -> {
                     Log.e("SosViewModel", "triggerSos error: ${result.message}, code: ${result.code}")
-                    
-                    // Map error codes to user-friendly messages
+                    timeoutJob?.cancel()
+
                     val userMessage = when (result.code) {
-                        "NO_CONTACTS" -> "Please add and verify at least one trusted contact before triggering SOS"
-                        "INTERNAL_ERROR" -> "Backend error occurred. Please check:\n• Do you have verified contacts?\n• Is the backend server running?\n• Contact your system administrator"
-                        "UNAUTHORIZED" -> "Authentication failed. Please log in again."
-                        "NETWORK_ERROR" -> "No internet connection. Please check your network."
-                        "TIMEOUT" -> "Request timed out. Please try again."
-                        else -> result.message
+                        "NO_CONTACTS"        -> "⚠️ No emergency contacts found. Please add a verified contact first.".trNonComposable()
+                        "INTERNAL_ERROR"     -> "Server error. Please tap Retry.".trNonComposable()
+                        "UNAUTHORIZED"       -> "Session expired. Please log in again.".trNonComposable()
+                        "NETWORK_ERROR"      -> "No internet connection. Please check your network and try again.".trNonComposable()
+                        "SERVER_UNAVAILABLE" -> "Server unavailable. Please tap Retry.".trNonComposable()
+                        else                 -> "SOS failed. Please tap Retry.".trNonComposable()
                     }
-                    
-                    _uiState.value = SosUiState(errorMessage = userMessage)
+
+                    _uiState.value = _uiState.value.copy(
+                        isTriggering = false,
+                        isConnectionTimeout = false,
+                        errorMessage = userMessage
+                    )
                 }
                 is NetworkResult.Loading -> Unit
             }
         }
+    }
+
+    /**
+     * Cancels the in-flight triggerSos request and resets state.
+     * Called when the user taps Back or I'M SAFE before the trigger has resolved.
+     */
+    fun abortTrigger() {
+        Log.d("SosViewModel", "abortTrigger called — cancelling in-flight trigger")
+        triggerJob?.cancel()
+        timeoutJob?.cancel()
+        pollJob?.cancel()
+        triggerJob = null
+        timeoutJob = null
+        pollJob = null
+        // Mark as cancelled so the screen navigates away cleanly
+        IotSosTracker.onAlertResolved()
+        _uiState.value = _uiState.value.copy(isCancelled = true)
     }
 
     fun sendNow() {
@@ -76,24 +216,58 @@ class SosViewModel(
             _uiState.value = _uiState.value.copy(isSending = true)
             when (val result = sosRepository.sendSosNow(alertId)) {
                 is NetworkResult.Success -> {
-                    Log.d("SosViewModel", "sendNow success")
+                    Log.d("SosViewModel", "sendNow success — SOS dispatched")
+                    
+                    val context = com.yourname.womensafety.data.AppServiceLocator.application
+                    val nm = context.getSystemService(android.app.NotificationManager::class.java)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                        val channel = android.app.NotificationChannel(
+                            "sos_delivery", "SOS Delivery Reports", android.app.NotificationManager.IMPORTANCE_HIGH
+                        )
+                        nm?.createNotificationChannel(channel)
+                    }
+
+                    var notifTitle = "SOS Dispatched"
+                    var notifText = "Your SOS alert has been delivered to your contacts."
+                    
+                    val report = result.data.deliveryReport
+                    if (report != null && report.any { !it.delivered }) {
+                        val failedCount = report.count { !it.delivered }
+                        val totalCount = report.size
+                        notifTitle = "SOS Partially Dispatched"
+                        notifText = "Sent to ${totalCount - failedCount} contact(s), but $failedCount failed (Rate Limit)."
+                        
+                        // Show a more detailed toast for individual contact status
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            val msg = report.filter { !it.delivered }.joinToString("\n") { "${it.phone}: ${it.status}" }
+                            android.widget.Toast.makeText(context, "Delivery failures:\n$msg", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }
+
+                    val notification = androidx.core.app.NotificationCompat.Builder(context, "sos_delivery")
+                        .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                        .setContentTitle(notifTitle)
+                        .setContentText(notifText)
+                        .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+                        .setAutoCancel(true)
+                        .build()
+                        
+                    nm?.notify(System.currentTimeMillis().toInt(), notification)
                     IotSosTracker.onAlertDispatched(alertId)
-                    _uiState.value = _uiState.value.copy(isSending = false, isSent = true)
+                    _uiState.value = _uiState.value.copy(
+                        isSending = false,
+                        isSent = true,
+                        deliveryReport = report ?: emptyList()
+                    )
                 }
                 is NetworkResult.Error -> {
                     when (result.code) {
                         "ALREADY_CANCELLED" -> {
-                            // Backend (409) confirms alert was already cancelled by the wearable
-                            // double-tap before the countdown timer fired. Treat as cancel success
-                            // so the screen navigates away cleanly instead of showing an error.
                             Log.d("SosViewModel", "sendNow: alert already cancelled — treating as cancel")
                             IotSosTracker.onAlertResolved()
                             _uiState.value = _uiState.value.copy(isSending = false, isCancelled = true)
                         }
                         "ALREADY_DISPATCHED", "ALREADY_SENT" -> {
-                            // Backend confirms the alert was already dispatched (e.g. by another
-                            // code path). Set isSent = true so a subsequent "I'm Safe" tap
-                            // correctly calls markUserSafe instead of cancelSos.
                             Log.d("SosViewModel", "sendNow: alert already dispatched — marking sent")
                             IotSosTracker.onAlertDispatched(alertId)
                             _uiState.value = _uiState.value.copy(isSending = false, isSent = true)
@@ -102,7 +276,7 @@ class SosViewModel(
                             Log.e("SosViewModel", "sendNow error: [${result.code}] ${result.message}")
                             _uiState.value = _uiState.value.copy(
                                 isSending = false,
-                                errorMessage = "Failed to dispatch SOS"
+                                errorMessage = "Failed to dispatch SOS — tap Retry".trNonComposable()
                             )
                         }
                     }
@@ -118,10 +292,40 @@ class SosViewModel(
      */
     fun initWithExistingAlert(alertId: String) {
         Log.d("SosViewModel", "initWithExistingAlert: alertId=$alertId")
-        // Only update tracker when the alertId is new — avoids overwriting the
-        // hardware-triggered flag that IotWearableManager already set.
         IotSosTracker.onUiAlertCreated(alertId)
-        _uiState.value = SosUiState(alertId = alertId)
+        _uiState.value = _uiState.value.copy(alertId = alertId)
+        startPolling(alertId)
+    }
+
+    private fun startPolling(alertId: String) {
+        pollJob?.cancel()
+        pollJob = viewModelScope.launch {
+            while (true) {
+                delay(2000L)
+                when (val res = sosRepository.getSosCountdown(alertId)) {
+                    is NetworkResult.Success -> {
+                        val status = res.data.status.lowercase()
+                        val alreadySent = status == "sent" || status == "dispatched"
+                        val cancelled = status == "cancelled" || status == "failed"
+                        
+                        _uiState.value = _uiState.value.copy(
+                            isSent = alreadySent || _uiState.value.isSent,
+                            isCancelled = cancelled || _uiState.value.isCancelled,
+                            countdownSeconds = res.data.countdownSeconds ?: _uiState.value.countdownSeconds,
+                            secondsRemaining = res.data.secondsRemaining ?: _uiState.value.secondsRemaining
+                        )
+                        
+                        if (alreadySent || cancelled || !res.data.isActive) {
+                            if (alreadySent) IotSosTracker.onAlertDispatched(alertId)
+                            break
+                        }
+                    }
+                    else -> {
+                        // ignore network errors on poll
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -137,14 +341,23 @@ class SosViewModel(
     }
 
     fun cancelSos() {
-        val alertId = _uiState.value.alertId ?: run {
-            // No alertId means SOS wasn't triggered yet — just mark cancelled locally
+        val alertId = _uiState.value.alertId
+
+        // If trigger is still in-flight (no alertId yet), abort it
+        if (alertId == null) {
+            if (_uiState.value.isTriggering) {
+                abortTrigger()
+                return
+            }
+            // No alertId and not triggering — just mark cancelled locally
             IotSosTracker.onAlertResolved()
-            _uiState.value = SosUiState(isCancelled = true)
+            _uiState.value = _uiState.value.copy(isCancelled = true)
             return
         }
+
         // Guard: don't fire a second request if one is already in-flight.
         if (_uiState.value.isCancelling) return
+
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isCancelling = true, errorMessage = null)
             val wasSent = _uiState.value.isSent
@@ -168,7 +381,7 @@ class SosViewModel(
                         errorMessage = if (wasSent) {
                             "Failed to notify contacts you're safe"
                         } else {
-                            "Failed to cancel SOS"
+                            "Failed to cancel SOS — tap to retry"
                         }
                     )
                 }
@@ -177,12 +390,10 @@ class SosViewModel(
         }
     }
 
-    companion object {
-        val Factory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return SosViewModel(AppServiceLocator.sosRepository) as T
-            }
-        }
+    override fun onCleared() {
+        super.onCleared()
+        triggerJob?.cancel()
+        timeoutJob?.cancel()
+        pollJob?.cancel()
     }
 }

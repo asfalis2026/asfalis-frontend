@@ -39,7 +39,15 @@ class HelpSupportViewModel(
     val searchQuery: StateFlow<String> = _searchQuery
 
     init {
-        // Debounce search — wait 400ms after user stops typing then hit API
+        // Step 1: Show cached FAQs immediately on first load (no spinner)
+        viewModelScope.launch {
+            val cached = supportRepository.getCachedFaqs()
+            if (!cached.isNullOrEmpty()) {
+                _uiState.value = HelpUiState.Success(cached)
+            }
+        }
+
+        // Step 2: Debounce search — refresh FAQs 400ms after user stops typing
         viewModelScope.launch {
             _searchQuery
                 .debounce(400L)
@@ -54,10 +62,18 @@ class HelpSupportViewModel(
     }
 
     private suspend fun fetchFaqs(search: String? = null) {
-        _uiState.value = HelpUiState.Loading
+        // Only show loading spinner if no cached content is visible and query changed
+        val hasCachedContent = _uiState.value is HelpUiState.Success
+        if (!hasCachedContent) {
+            _uiState.value = HelpUiState.Loading
+        }
         when (val result = supportRepository.getFaqs(search)) {
             is NetworkResult.Success -> _uiState.value = HelpUiState.Success(result.data)
-            is NetworkResult.Error   -> _uiState.value = HelpUiState.Error(result.message)
+            is NetworkResult.Error   -> {
+                if (!hasCachedContent) {
+                    _uiState.value = HelpUiState.Error(result.message)
+                }
+            }
             is NetworkResult.Loading -> Unit
         }
     }

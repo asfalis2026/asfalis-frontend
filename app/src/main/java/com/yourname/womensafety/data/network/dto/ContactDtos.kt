@@ -31,9 +31,10 @@ data class AddContactRequest(
 )
 
 data class UpdateContactRequest(
-    @SerializedName("name") val name: String? = null,
-    @SerializedName("phone") val phone: String? = null,
-    @SerializedName("relationship") val relationship: String? = null
+    @SerializedName("name")         val name: String? = null,
+    @SerializedName("phone")        val phone: String? = null,
+    @SerializedName("relationship") val relationship: String? = null,
+    @SerializedName("email")        val email: String? = null
 )
 
 /** Response from POST /api/contacts (Step 1: Send OTP) */

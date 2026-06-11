@@ -9,6 +9,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -17,6 +19,9 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.yourname.womensafety.utils.tr
+import com.yourname.womensafety.utils.trNonComposable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,14 +51,18 @@ fun LoginScreen(navController: NavController) {
     val authViewModel: AuthViewModel = viewModel(factory = AuthViewModel.Factory)
     val uiState by authViewModel.uiState.collectAsState()
 
-    var isLoginMode by remember { mutableStateOf(true) }
+    var isLoginMode by rememberSaveable { mutableStateOf(true) }
 
     // Phone-based form states
-    var selectedCountry by remember { mutableStateOf(ALL_COUNTRIES.first()) } // India (+91) default
-    var phoneInput by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var fullName by remember { mutableStateOf("") }
-    var country by remember { mutableStateOf("") }
+    var selectedCountryCode by rememberSaveable { mutableStateOf(ALL_COUNTRIES.first().isoCode) }
+    val selectedCountry = ALL_COUNTRIES.find { it.isoCode == selectedCountryCode } ?: ALL_COUNTRIES.first()
+    
+    var phoneInput by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var passwordError by rememberSaveable { mutableStateOf<String?>(null) }
+    var fullName by rememberSaveable { mutableStateOf("") }
+    var country by rememberSaveable { mutableStateOf("") }
+    var termsAccepted by rememberSaveable { mutableStateOf(false) }
 
     // Prevent going back to Splash; close app instead
     BackHandler { (context as? Activity)?.finish() }
@@ -69,7 +78,7 @@ fun LoginScreen(navController: NavController) {
     // After Step 1 register — Twilio has sent the OTP SMS; navigate to OTP screen
     LaunchedEffect(uiState.registeredPhone) {
         uiState.registeredPhone?.let { phoneNumber ->
-            navController.navigate("verify_otp/${Uri.encode(phoneNumber)}")
+            navController.navigate("verify_otp?phone=${Uri.encode(phoneNumber)}")
             authViewModel.clearError()
         }
     }
@@ -77,10 +86,10 @@ fun LoginScreen(navController: NavController) {
     // PHONE_NOT_VERIFIED during login → toast the error, then redirect to OTP screen
     LaunchedEffect(uiState.unverifiedPhone) {
         uiState.unverifiedPhone?.let { phoneNumber ->
-            Toast.makeText(context, "Phone not verified. Sending OTP to $phoneNumber…", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "Phone not verified. Sending OTP to $phoneNumber…".trNonComposable(), Toast.LENGTH_LONG).show()
             authViewModel.resendOtp(phoneNumber) // send a fresh OTP in case the original expired
             delay(1500L) // let the toast be readable before switching screens
-            navController.navigate("verify_otp/${Uri.encode(phoneNumber)}")
+            navController.navigate("verify_otp?phone=${Uri.encode(phoneNumber)}")
             authViewModel.clearError()
         }
     }
@@ -102,7 +111,7 @@ fun LoginScreen(navController: NavController) {
     }
 
     val backgroundGradient = Brush.verticalGradient(
-        colors = listOf(Color.Black, Color(0xFF1A0000), Color(0xFF330000))
+        colors = listOf(Color(0xFF000000), Color(0xFF080404), Color(0xFF120508))
     )
 
     Box(modifier = Modifier.fillMaxSize().background(backgroundGradient)) {
@@ -110,7 +119,8 @@ fun LoginScreen(navController: NavController) {
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .padding(horizontal = 30.dp),
+                .padding(horizontal = 30.dp)
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(Modifier.height(40.dp))
@@ -120,13 +130,13 @@ fun LoginScreen(navController: NavController) {
                 modifier = Modifier
                     .size(100.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFFE10600).copy(0.1f)),
+                    .background(Color(0xFFE25F71).copy(0.1f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Shield,
                     contentDescription = null,
-                    tint = Color(0xFFE10600),
+                    tint = Color(0xFFE25F71),
                     modifier = Modifier.size(50.dp)
                 )
             }
@@ -134,13 +144,13 @@ fun LoginScreen(navController: NavController) {
             Spacer(Modifier.height(24.dp))
 
             Text(
-                text = if (isLoginMode) "Welcome back" else "Create Account",
+                text = if (isLoginMode) "Welcome back".tr() else "Create Account".tr(),
                 color = Color.White,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = if (isLoginMode) "Sign in to continue" else "Join our safety network",
+                text = if (isLoginMode) "Sign in to continue".tr() else "Join our safety network".tr(),
                 color = Color.Gray,
                 fontSize = 16.sp
             )
@@ -152,14 +162,14 @@ fun LoginScreen(navController: NavController) {
                 AuthTextField(
                     value = fullName,
                     onValueChange = { fullName = it },
-                    label = "Full Name",
+                    label = "Full Name".tr(),
                     icon = Icons.Default.Person
                 )
                 Spacer(Modifier.height(16.dp))
                 AuthTextField(
                     value = country,
                     onValueChange = { country = it },
-                    label = "Country",
+                    label = "Country".tr(),
                     icon = Icons.Default.Public
                 )
                 Spacer(Modifier.height(16.dp))
@@ -168,7 +178,7 @@ fun LoginScreen(navController: NavController) {
             // --- PHONE NUMBER FIELD (shared by login & register) ---
             PhoneInputRow(
                 selectedCountry = selectedCountry,
-                onCountrySelected = { selectedCountry = it },
+                onCountrySelected = { selectedCountryCode = it.isoCode },
                 phoneInput = phoneInput,
                 onPhoneChanged = { phoneInput = it.filter { c -> c.isDigit() } }
             )
@@ -177,11 +187,20 @@ fun LoginScreen(navController: NavController) {
 
             AuthTextField(
                 value = password,
-                onValueChange = { password = it },
-                label = "Password",
+                onValueChange = { 
+                    password = it
+                    passwordError = null
+                },
+                label = "Password".tr(),
                 icon = Icons.Default.Lock,
-                isPassword = true
+                isPassword = true,
+                errorMessage = passwordError
             )
+
+            if (!isLoginMode) {
+                Spacer(Modifier.height(8.dp))
+                PasswordCriteriaChecklist(password = password)
+            }
 
             if (isLoginMode) {
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
@@ -190,15 +209,47 @@ fun LoginScreen(navController: NavController) {
                         if (phoneInput.isNotBlank()) {
                             authViewModel.forgotPassword(phoneNumber)
                         } else {
-                            Toast.makeText(context, "Enter your phone number first", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Enter your phone number first".trNonComposable(), Toast.LENGTH_SHORT).show()
                         }
                     }) {
-                        Text("Forgot Password?", color = Color(0xFFE10600), fontSize = 14.sp)
+                        Text("Forgot Password?".tr(), color = Color(0xFFE25F71), fontSize = 14.sp)
                     }
                 }
             }
 
-            Spacer(Modifier.height(30.dp))
+            Spacer(Modifier.height(16.dp))
+
+            // Terms & Conditions Checkbox
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Checkbox(
+                    checked = termsAccepted,
+                    onCheckedChange = { termsAccepted = it },
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = Color(0xFFE25F71),
+                        uncheckedColor = Color.Gray,
+                        checkmarkColor = Color.White
+                    )
+                )
+                Spacer(Modifier.width(8.dp))
+                Column(modifier = Modifier.clickable { navController.navigate("terms_and_conditions?source=login") }) {
+                    Text("I agree to the Terms & Conditions".tr(),
+                        color = Color(0xFFE25F71),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+                    )
+                    Text("By proceeding you consent to SOS data collection for your safety.".tr(),
+                        color = Color.Gray,
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
 
             // --- PRIMARY ACTION ---
             Button(
@@ -209,21 +260,25 @@ fun LoginScreen(navController: NavController) {
                         if (phoneInput.isNotBlank() && password.isNotBlank()) {
                             authViewModel.loginWithPhone(fullPhone, password)
                         } else {
-                            Toast.makeText(context, "Please enter phone number and password", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Please enter phone number and password".trNonComposable(), Toast.LENGTH_SHORT).show()
                         }
                     } else {
                         if (fullName.isNotBlank() && phoneInput.isNotBlank() && password.isNotBlank() && country.isNotBlank()) {
+                            if (password.length < 8 || !password.any { it.isUpperCase() } || !password.any { it.isLowerCase() } || !password.any { it.isDigit() }) {
+                                passwordError = "Password must be at least 8 characters with uppercase, lowercase, and digit.".trNonComposable()
+                                return@Button
+                            }
                             authViewModel.registerWithPhone(fullName, fullPhone, password, country)
                         } else {
-                            Toast.makeText(context, "Please fill in all fields", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Please fill in all fields".trNonComposable(), Toast.LENGTH_SHORT).show()
                         }
                     }
                 },
-                enabled = !uiState.isLoading,
+                enabled = !uiState.isLoading && termsAccepted,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE10600)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE25F71)),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 if (uiState.isLoading) {
@@ -234,7 +289,7 @@ fun LoginScreen(navController: NavController) {
                     )
                 } else {
                     Text(
-                        text = if (isLoginMode) "Login" else "Get Verification Code",
+                        text = if (isLoginMode) "Log In".tr() else "Get Verification Code".tr(),
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -247,7 +302,7 @@ fun LoginScreen(navController: NavController) {
             // --- TOGGLE MODE ---
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = if (isLoginMode) "New to ASFALIS?" else "Already have an account?",
+                    text = if (isLoginMode) "New to ASFALIS?".tr() else "Already have an account?".tr(),
                     color = Color.Gray
                 )
                 TextButton(onClick = {
@@ -255,8 +310,8 @@ fun LoginScreen(navController: NavController) {
                     isLoginMode = !isLoginMode
                 }) {
                     Text(
-                        text = if (isLoginMode) "Register" else "Login",
-                        color = Color(0xFFE10600),
+                        text = if (isLoginMode) "Register".tr() else "Log In".tr(),
+                        color = Color(0xFFE25F71),
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -282,7 +337,7 @@ fun LoginScreen(navController: NavController) {
             Dialog(onDismissRequest = { }) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    color = Color(0xFF1A0000),
+                    color = Color(0xFF160E0E),
                     shape = RoundedCornerShape(20.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(0.12f))
                 ) {
@@ -290,8 +345,7 @@ fun LoginScreen(navController: NavController) {
                         modifier = Modifier.padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text(
-                            text = "Device Change Detected",
+                        Text(text = "Device Change Detected".tr(),
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 20.sp
@@ -299,26 +353,24 @@ fun LoginScreen(navController: NavController) {
 
                         Text(
                             text = if (transferEnabled)
-                                "Transfer window is open. You can move your account to this device now."
+                                "Transfer window is open. You can move your account to this device now.".tr()
                             else
-                                "Login on this new device is blocked for safety. You can transfer after the waiting period.",
+                                "Login on this new device is blocked for safety. You can transfer after the waiting period.".tr(),
                             color = Color.Gray,
                             fontSize = 14.sp,
                             lineHeight = 20.sp
                         )
 
                         if (!transferEnabled) {
-                            Text(
-                                text = "Time remaining: ${formatDuration(remainingSeconds)}",
-                                color = Color(0xFFE10600),
+                            Text(text = "Time remaining: ".tr() + formatDuration(remainingSeconds),
+                                color = Color(0xFFE25F71),
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 14.sp
                             )
                         }
 
                         transferState.eligibleAt?.let {
-                            Text(
-                                text = "Eligible at: $it",
+                            Text(text = "Eligible at: $it".tr(),
                                 color = Color.Gray,
                                 fontSize = 12.sp
                             )
@@ -328,7 +380,7 @@ fun LoginScreen(navController: NavController) {
                             onClick = {
                                 val fullPhone = selectedCountry.dialCode + phoneInput.trim()
                                 if (password.isBlank()) {
-                                    Toast.makeText(context, "Enter password to confirm transfer", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Enter password to confirm transfer".trNonComposable(), Toast.LENGTH_SHORT).show()
                                 } else {
                                     authViewModel.confirmHandsetTransfer(fullPhone, password)
                                 }
@@ -337,11 +389,10 @@ fun LoginScreen(navController: NavController) {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(52.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE10600)),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE25F71)),
                             shape = RoundedCornerShape(14.dp)
                         ) {
-                            Text(
-                                text = "Transfer account to this device",
+                            Text(text = "Transfer account to this device".tr(),
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 textAlign = TextAlign.Center
@@ -357,7 +408,7 @@ fun LoginScreen(navController: NavController) {
                             border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(0.2f)),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
                         ) {
-                            Text("Close")
+                            Text("Close".tr())
                         }
                     }
                 }
@@ -386,7 +437,7 @@ fun PhoneInputRow(
     var search by remember { mutableStateOf("") }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text("Phone Number", color = Color.Gray, fontSize = 12.sp,
+        Text("Phone Number".tr(), color = Color.Gray, fontSize = 12.sp,
             modifier = Modifier.padding(start = 4.dp, bottom = 4.dp))
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -401,8 +452,7 @@ fun PhoneInputRow(
                 contentPadding = PaddingValues(horizontal = 12.dp),
                 modifier = Modifier.height(56.dp)
             ) {
-                Text(
-                    "${selectedCountry.flag} ${selectedCountry.dialCode}",
+                Text("${selectedCountry.flag} ${selectedCountry.dialCode}".tr(),
                     color = Color.White,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium
@@ -416,16 +466,16 @@ fun PhoneInputRow(
                 value = phoneInput,
                 onValueChange = onPhoneChanged,
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("9876543210", color = Color.Gray.copy(0.5f)) },
+                placeholder = { Text("9876543210".tr(), color = Color.Gray.copy(0.5f)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = Color.White,
                     unfocusedTextColor = Color.White,
                     focusedContainerColor = Color.White.copy(0.05f),
                     unfocusedContainerColor = Color.White.copy(0.05f),
-                    focusedBorderColor = Color(0xFFE10600),
+                    focusedBorderColor = Color(0xFFE25F71),
                     unfocusedBorderColor = Color.White.copy(0.1f),
-                    cursorColor = Color(0xFFE10600)
+                    cursorColor = Color(0xFFE25F71)
                 ),
                 shape = RoundedCornerShape(14.dp),
                 singleLine = true
@@ -445,15 +495,15 @@ fun PhoneInputRow(
                         .fillMaxWidth(0.85f)
                         .heightIn(max = 480.dp)
                         .clip(RoundedCornerShape(20.dp))
-                        .background(Color(0xFF1A0000))
+                        .background(Color(0xFF160E0E))
                         .padding(16.dp)
                 ) {
-                    Text("Select Country", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Select Country".tr(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(
                         value = search,
                         onValueChange = { search = it },
-                        placeholder = { Text("Search country...", color = Color.Gray) },
+                        placeholder = { Text("Search country...".tr(), color = Color.Gray) },
                         singleLine = true,
                         leadingIcon = { Icon(Icons.Default.Search, null, tint = Color.Gray, modifier = Modifier.size(18.dp)) },
                         colors = OutlinedTextFieldDefaults.colors(
@@ -461,7 +511,7 @@ fun PhoneInputRow(
                             unfocusedTextColor = Color.White,
                             focusedContainerColor = Color.White.copy(0.05f),
                             unfocusedContainerColor = Color.White.copy(0.05f),
-                            focusedBorderColor = Color(0xFFE10600),
+                            focusedBorderColor = Color(0xFFE25F71),
                             unfocusedBorderColor = Color.White.copy(0.2f)
                         ),
                         modifier = Modifier.fillMaxWidth()
@@ -477,7 +527,7 @@ fun PhoneInputRow(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(if (isSel) Color(0xFFE10600).copy(0.15f) else Color.Transparent)
+                                    .background(if (isSel) Color(0xFFE25F71).copy(0.15f) else Color.Transparent)
                                     .clickable {
                                         onCountrySelected(c)
                                         expanded = false
@@ -489,7 +539,7 @@ fun PhoneInputRow(
                                 Text(c.flag, fontSize = 22.sp)
                                 Text(
                                     c.name,
-                                    color = if (isSel) Color(0xFFE10600) else Color.White,
+                                    color = if (isSel) Color(0xFFE25F71) else Color.White,
                                     fontSize = 14.sp,
                                     modifier = Modifier.weight(1f)
                                 )
@@ -509,7 +559,8 @@ fun AuthTextField(
     onValueChange: (String) -> Unit,
     label: String,
     icon: ImageVector,
-    isPassword: Boolean = false
+    isPassword: Boolean = false,
+    errorMessage: String? = null
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
 
@@ -518,7 +569,7 @@ fun AuthTextField(
         onValueChange = onValueChange,
         modifier = Modifier.fillMaxWidth(),
         label = { Text(label, color = Color.Gray) },
-        leadingIcon = { Icon(icon, null, tint = Color(0xFFE10600)) },
+        leadingIcon = { Icon(icon, null, tint = Color(0xFFE25F71)) },
         trailingIcon = {
             if (isPassword) {
                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
@@ -530,15 +581,19 @@ fun AuthTextField(
                 }
             }
         },
+        isError = errorMessage != null,
+        supportingText = errorMessage?.let { 
+            { Text(it, color = Color(0xFFE25F71), fontSize = 12.sp) } 
+        },
         visualTransformation = if (isPassword && !passwordVisible) PasswordVisualTransformation() else VisualTransformation.None,
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = Color.White,
             unfocusedTextColor = Color.White,
             focusedContainerColor = Color.White.copy(0.05f),
             unfocusedContainerColor = Color.White.copy(0.05f),
-            focusedBorderColor = Color(0xFFE10600),
+            focusedBorderColor = Color(0xFFE25F71),
             unfocusedBorderColor = Color.White.copy(0.1f),
-            cursorColor = Color(0xFFE10600)
+            cursorColor = Color(0xFFE25F71)
         ),
         shape = RoundedCornerShape(14.dp),
         singleLine = true

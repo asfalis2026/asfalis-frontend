@@ -4,7 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 data class SecurityPolicyState(
-    val screenshotProtectionEnabled: Boolean = true,
+    val screenshotProtectionEnabled: Boolean = false,
     val protectedScreens: Set<String> = setOf("trusted_contacts", "sos_history")
 )
 

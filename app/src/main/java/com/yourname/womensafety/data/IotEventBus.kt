@@ -41,6 +41,11 @@ sealed class IotAction {
      * for [PROXIMITY_BREACH_COUNT] consecutive polls — this event is informational only.
      */
     data class ProximityUpdate(val distanceMetres: Float) : IotAction()
+    /**
+     * Emitted when a "PONG" response is received from the ESP32.
+     * [latencyMs] is the round-trip time in milliseconds since the "PING" was sent.
+     */
+    data class LatencyUpdate(val latencyMs: Long) : IotAction()
 }
 
 /**
@@ -53,12 +58,32 @@ sealed class IotAction {
 object IotEventBus {
 
     private val _events = MutableSharedFlow<IotAction>(extraBufferCapacity = 1)
+    private val _commands = MutableSharedFlow<IotCommand>(extraBufferCapacity = 1)
 
     /** Observe this flow in AppNavGraph. */
     val events: SharedFlow<IotAction> = _events
+
+    /** Observe this flow in IotWearableManager to receive commands to send to the wearable. */
+    val commands: SharedFlow<IotCommand> = _commands
 
     /** Thread-safe. Can be called from any coroutine / background thread. */
     fun post(action: IotAction) {
         _events.tryEmit(action)
     }
+
+    /** Thread-safe. Send commands from the UI/ViewModels to the connected wearable. */
+    fun sendCommand(command: IotCommand) {
+        _commands.tryEmit(command)
+    }
+}
+
+/**
+ * Commands dispatched from the App to the Wearable.
+ */
+sealed class IotCommand {
+    /** Tells the wearable to trigger its motor and LED (haptic feedback). */
+    data object TriggerFeedback : IotCommand()
+
+    /** Sends a "PING" to the wearable to measure round-trip latency. */
+    data object MeasureLatency : IotCommand()
 }

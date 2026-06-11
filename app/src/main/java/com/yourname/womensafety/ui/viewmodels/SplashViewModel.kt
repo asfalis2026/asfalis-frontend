@@ -7,10 +7,12 @@ import com.yourname.womensafety.data.AppServiceLocator
 import com.yourname.womensafety.data.local.TokenManager
 import com.yourname.womensafety.data.repository.AuthRepository
 import com.yourname.womensafety.data.repository.NetworkResult
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import com.yourname.womensafety.utils.trNonComposable
 
 data class SplashDestination(
     val route: String? = null  // null = still loading
@@ -26,33 +28,39 @@ class SplashViewModel(
 
     fun resolveStartDestination() {
         viewModelScope.launch {
+            // Ensure DataStore has time to settle during cold start
+            delay(500)
+
+            val languageSelected = tokenManager.isLanguageSelected().first()
             val onboardingDone = tokenManager.isOnboardingComplete().first()
             val permissionsGranted = tokenManager.arePermissionsGranted().first()
             val loggedIn = tokenManager.isLoggedIn().first()
 
             val route = when {
-                !onboardingDone -> "onboarding"
-                !permissionsGranted -> "permissions"
-                loggedIn -> {
-                    // Optionally validate the token is still fresh
-                    try {
-                        val result = authRepository.validateToken()
-                        if (result is NetworkResult.Error && result.code == "UNAUTHORIZED") {
-                            tokenManager.clearTokens()
-                            "login"
-                        } else {
-                            "dashboard"
-                        }
-                    } catch (e: Exception) {
-                        // Network error — keep user logged in for offline support
-                        "dashboard"
-                    }
-                }
-                else -> "login"
+                !languageSelected   -> "language_selection"
+                !onboardingDone     -> "onboarding".trNonComposable()
+                !permissionsGranted -> "permissions".trNonComposable()
+                loggedIn            -> "dashboard".trNonComposable()
+                else                -> "login".trNonComposable()
             }
             _destination.value = SplashDestination(route)
+
+            if (loggedIn) {
+                try {
+                    val result = authRepository.validateToken()
+                    if (result is NetworkResult.Error &&
+                        (result.code == "UNAUTHORIZED" || result.code == "TOKEN_INVALID")) {
+                        tokenManager.clearTokens()
+                        // Only trigger global session expiration if we were actually authenticated
+                        com.yourname.womensafety.data.SessionManager.onSessionExpired()
+                    }
+                } catch (_: Exception) {
+                    // Network error during background validation — keep user logged in.
+                }
+            }
         }
     }
+
 
     companion object {
         val Factory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {

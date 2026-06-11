@@ -10,6 +10,7 @@ import com.yourname.womensafety.data.repository.NetworkResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import com.yourname.womensafety.utils.trNonComposable
 
 data class LiveMapUiState(
     val isLoadingLocation: Boolean = true,
@@ -99,7 +100,7 @@ class LiveMapViewModel(
                 is NetworkResult.Error -> {
                     _uiState.value = _uiState.value.copy(
                         isTogglingShare = false,
-                        errorMessage = "Failed to stop sharing"
+                        errorMessage = "Failed to stop sharing".trNonComposable()
                     )
                 }
                 is NetworkResult.Loading -> Unit

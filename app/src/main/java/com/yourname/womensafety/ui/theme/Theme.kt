@@ -10,16 +10,34 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-// We define ONLY a dark scheme to match your screenshots 100%
+// ── Dark colour scheme — matches the image palette precisely ──────────────────
 private val SafetyDarkColorScheme = darkColorScheme(
-    primary = Color(0xFFC60000),    // RedPrimary
-    background = Color.Black,
-    surface = Color(0xFF1A1111),    // CardBg
-    onPrimary = Color.White,
-    onBackground = Color.White,
-    onSurface = Color.White
+    primary          = RedPrimary,
+    onPrimary        = Color.White,
+    primaryContainer = RedPrimary.copy(alpha = 0.15f),
+
+    secondary        = AmberWarning,
+    onSecondary      = Color.White,
+
+    tertiary         = BlueInfo,
+    onTertiary       = Color.White,
+
+    background       = BgDark,
+    onBackground     = Color.White,
+
+    surface          = CardBg,
+    onSurface        = Color.White,
+    surfaceVariant   = CardBgAlt,
+    onSurfaceVariant = TextGray,
+
+    error            = RedPrimary,
+    onError          = Color.White,
+
+    outline          = Color.White.copy(alpha = 0.08f),
+    outlineVariant   = Color.White.copy(alpha = 0.05f)
 )
 
+// ── App theme composable ──────────────────────────────────────────────────────
 @Composable
 fun WomenSafetyAppTheme(
     content: @Composable () -> Unit
@@ -27,21 +45,22 @@ fun WomenSafetyAppTheme(
     val colorScheme = SafetyDarkColorScheme
     val view = LocalView.current
 
-    // This block makes the Status Bar (time/battery) transparent so your gradient works
+    // Transparent status bar so the gradient bleeds through perfectly
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = Color.Transparent.toArgb()
-            window.navigationBarColor = Color.Black.toArgb()
+            window.statusBarColor     = Color.Transparent.toArgb()
+            window.navigationBarColor = Color(0xFF090000).toArgb()
 
-            // This ensures icons (clock/wifi) stay white on the dark background
+            // Keep status-bar icons white on the dark background
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
+            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = false
         }
     }
 
     MaterialTheme(
         colorScheme = colorScheme,
-        // Ensure you have a Typography.kt file, or remove this line if it errors
-        content = content
+        typography  = AsfalisTypography,
+        content     = content
     )
 }

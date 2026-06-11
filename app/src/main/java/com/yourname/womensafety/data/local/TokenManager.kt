@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.map
 import java.util.UUID
 
 // Extension property for DataStore
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "raksha_auth")
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "asfalis_auth")
 
 class TokenManager(private val context: Context) {
 
@@ -28,6 +28,7 @@ class TokenManager(private val context: Context) {
         private val USER_ID = stringPreferencesKey("user_id")
         private val IS_LOGGED_IN = booleanPreferencesKey("is_logged_in")
         private val ONBOARDING_COMPLETE = booleanPreferencesKey("onboarding_complete")
+        private val IS_LANGUAGE_SELECTED = booleanPreferencesKey("is_language_selected")
         private val PERMISSIONS_GRANTED = booleanPreferencesKey("permissions_granted")
         private val DEVICE_ID = stringPreferencesKey("device_id")
     }
@@ -77,6 +78,13 @@ class TokenManager(private val context: Context) {
     fun getUserId(): Flow<String?> = context.dataStore.data.map { it[USER_ID] }
 
     // --- ONBOARDING STATE ---
+    fun isLanguageSelected(): Flow<Boolean> =
+        context.dataStore.data.map { it[IS_LANGUAGE_SELECTED] ?: false }
+
+    suspend fun setLanguageSelected() {
+        context.dataStore.edit { it[IS_LANGUAGE_SELECTED] = true }
+    }
+
     fun isOnboardingComplete(): Flow<Boolean> =
         context.dataStore.data.map { it[ONBOARDING_COMPLETE] ?: false }
 
@@ -93,7 +101,15 @@ class TokenManager(private val context: Context) {
     }
 
     // --- LOGOUT ---
-    suspend fun clearTokens() {
+    /**
+     * Clears auth tokens from DataStore.
+     *
+     * @param isFullLogout If true (explicit user-initiated logout), also clears the
+     *   onboarding and permissions flags so the next login correctly goes through
+     *   the full setup flow. If false (token refresh failure), only auth tokens are
+     *   cleared — the user keeps their onboarding state.
+     */
+    suspend fun clearTokens(isFullLogout: Boolean = false) {
         context.dataStore.edit { prefs ->
             prefs.remove(ACCESS_TOKEN)
             prefs.remove(REFRESH_TOKEN)
@@ -101,6 +117,13 @@ class TokenManager(private val context: Context) {
             prefs.remove(TOKEN_EXPIRES_AT)
             prefs.remove(USER_ID)
             prefs[IS_LOGGED_IN] = false
+            // Only wipe onboarding/permissions on explicit logout.
+            // Do NOT clear these on token refresh failure — we don't want to
+            // force the user through onboarding again just because their token expired.
+            if (isFullLogout) {
+                prefs.remove(ONBOARDING_COMPLETE)
+                prefs.remove(PERMISSIONS_GRANTED)
+            }
         }
     }
 
@@ -130,15 +153,16 @@ class TokenManager(private val context: Context) {
             val refreshService = com.yourname.womensafety.data.network.RetrofitClient.createRefreshService()
             val response = refreshService.refreshToken(RefreshRequest(refreshToken))
             val body = response.body()
-            if (response.isSuccessful && body?.isSuccess == true && body.data != null) {
-                val data = body.data
+            // body is ApiResponse<RefreshData> — extract the nested data object
+            val refreshData = body?.data
+            if (response.isSuccessful && refreshData != null) {
                 context.dataStore.edit { prefs ->
-                    prefs[ACCESS_TOKEN] = data.accessToken
-                    if (data.refreshToken != null) prefs[REFRESH_TOKEN] = data.refreshToken
-                    if (data.expiresIn != null)
-                        prefs[TOKEN_EXPIRES_AT] = System.currentTimeMillis() + (data.expiresIn * 1000L)
+                    prefs[ACCESS_TOKEN] = refreshData.accessToken
+                    if (refreshData.refreshToken != null) prefs[REFRESH_TOKEN] = refreshData.refreshToken
+                    if (refreshData.expiresIn != null)
+                        prefs[TOKEN_EXPIRES_AT] = System.currentTimeMillis() + (refreshData.expiresIn * 1000L)
                 }
-                data.accessToken
+                refreshData.accessToken
             } else {
                 null
             }
