@@ -9,7 +9,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.yourname.womensafety.utils.tr
 import kotlinx.coroutines.launch
 
 private data class OnboardingPage(
@@ -38,44 +39,45 @@ private data class OnboardingPage(
     val description: String
 )
 
-private val onboardingPages = listOf(
-    OnboardingPage(
-        icon = Icons.Outlined.Shield,
-        accentColor = Color(0xFFE10600),
-        tag = "ALWAYS PROTECTED",
-        title = "Your Safety,\nAlways On",
-        subtitle = "Real-time protection that works even when you can't speak.",
-        description = "Asfalis monitors your safety 24/7 with intelligent background services that never sleep."
-    ),
-    OnboardingPage(
-        icon = Icons.Outlined.Sensors,
-        accentColor = Color(0xFFFF6B00),
-        tag = "AI-POWERED",
-        title = "Auto SOS\nvia Machine Learning",
-        subtitle = "Falls and impacts detected instantly by on-device AI.",
-        description = "Our lightweight LightGBM model runs entirely on your device — no internet needed to detect danger."
-    ),
-    OnboardingPage(
-        icon = Icons.Outlined.Watch,
-        accentColor = Color(0xFFE10600),
-        tag = "HARDWARE SYNC",
-        title = "ESP32 Bracelet\nIntegration",
-        subtitle = "One press on your wearable = immediate SOS trigger.",
-        description = "Your bracelet connects via Bluetooth. Press once to trigger SOS, double-press to cancel. Proximity alerts if separated."
-    ),
-    OnboardingPage(
-        icon = Icons.Outlined.Group,
-        accentColor = Color(0xFF00B0FF),
-        tag = "TRUSTED NETWORK",
-        title = "Your People\nGet Notified",
-        subtitle = "WhatsApp + SMS alerts reach your trusted contacts instantly.",
-        description = "Add verified contacts who receive your live location and SOS alert within seconds of triggering."
-    )
-)
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OnboardingScreen(navController: NavController) {
+    // All text is declared INSIDE the composable so .tr() can observe language state
+    val onboardingPages = listOf(
+        OnboardingPage(
+            icon = Icons.Outlined.Shield,
+            accentColor = Color(0xFFE25F71),
+            tag = "ALWAYS PROTECTED".tr(),
+            title = "Your Safety,\nAlways On".tr(),
+            subtitle = "Real-time protection that works even when you can't speak.".tr(),
+            description = "Asfalis monitors your safety 24/7 with intelligent background services that never sleep.".tr()
+        ),
+        OnboardingPage(
+            icon = Icons.Outlined.Sensors,
+            accentColor = Color(0xFFFF6B00),
+            tag = "AI-POWERED".tr(),
+            title = "Auto SOS\nvia Machine Learning".tr(),
+            subtitle = "Falls and impacts detected instantly by on-device AI.".tr(),
+            description = "Our lightweight LightGBM model runs entirely on your device — no internet needed to detect danger.".tr()
+        ),
+        OnboardingPage(
+            icon = Icons.Outlined.Watch,
+            accentColor = Color(0xFFE25F71),
+            tag = "HARDWARE SYNC".tr(),
+            title = "ESP32 Bracelet\nIntegration".tr(),
+            subtitle = "One press on your wearable = immediate SOS trigger.".tr(),
+            description = "Your bracelet connects via Bluetooth. Press once to trigger SOS, double-press to cancel. Proximity alerts if separated.".tr()
+        ),
+        OnboardingPage(
+            icon = Icons.Outlined.Group,
+            accentColor = Color(0xFF00B0FF),
+            tag = "TRUSTED NETWORK".tr(),
+            title = "Your People\nGet Notified".tr(),
+            subtitle = "WhatsApp + SMS alerts reach your trusted contacts instantly.".tr(),
+            description = "Add verified contacts who receive your live location and SOS alert within seconds of triggering.".tr()
+        )
+    )
+
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(pageCount = { onboardingPages.size })
@@ -84,16 +86,16 @@ fun OnboardingScreen(navController: NavController) {
 
     val currentAccent = onboardingPages[currentPage].accentColor
 
-    val infiniteTransition = rememberInfiniteTransition(label = "onboarding")
+    val infiniteTransition = rememberInfiniteTransition(label = "onboarding".tr())
     val pulseAlpha by infiniteTransition.animateFloat(
         initialValue = 0.06f, targetValue = 0.18f,
         animationSpec = infiniteRepeatable(tween(1600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "pulse"
+        label = "pulse".tr()
     )
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 1f, targetValue = 1.12f,
         animationSpec = infiniteRepeatable(tween(1600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "scale"
+        label = "scale".tr()
     )
 
     Box(
@@ -132,7 +134,7 @@ fun OnboardingScreen(navController: NavController) {
                         },
                         modifier = Modifier.align(Alignment.CenterEnd)
                     ) {
-                        Text("Skip", color = Color.Gray, fontSize = 14.sp)
+                        Text("Skip".tr(), color = Color.Gray, fontSize = 14.sp)
                     }
                 }
             }
@@ -159,7 +161,7 @@ fun OnboardingScreen(navController: NavController) {
                     val width by animateDpAsState(
                         targetValue = if (isSelected) 28.dp else 8.dp,
                         animationSpec = spring(stiffness = Spring.StiffnessMedium),
-                        label = "dot_width"
+                        label = "dot_width".tr()
                     )
                     Box(
                         modifier = Modifier
@@ -205,7 +207,7 @@ fun OnboardingScreen(navController: NavController) {
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = if (isLastPage) "GET STARTED" else "NEXT",
+                                text = if (isLastPage) "Get Started".tr() else "Next".tr(),
                                 color = Color.White,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.ExtraBold,
@@ -213,7 +215,7 @@ fun OnboardingScreen(navController: NavController) {
                             )
                             if (!isLastPage) {
                                 Spacer(Modifier.width(8.dp))
-                                Icon(Icons.Default.ArrowForward, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = Color.White, modifier = Modifier.size(18.dp))
                             }
                         }
                     }
@@ -320,10 +322,10 @@ fun FeatureItem(icon: androidx.compose.ui.graphics.vector.ImageVector, title: St
         verticalAlignment = Alignment.Top
     ) {
         Box(
-            modifier = Modifier.size(44.dp).clip(CircleShape).background(Color(0xFFE10600).copy(alpha = 0.15f)),
+            modifier = Modifier.size(44.dp).clip(CircleShape).background(Color(0xFFE25F71).copy(alpha = 0.15f)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(imageVector = icon, contentDescription = null, tint = Color(0xFFE10600), modifier = Modifier.size(20.dp))
+            Icon(imageVector = icon, contentDescription = null, tint = Color(0xFFE25F71), modifier = Modifier.size(20.dp))
         }
         Spacer(modifier = Modifier.width(16.dp))
         Column {

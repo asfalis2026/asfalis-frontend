@@ -21,6 +21,7 @@ import androidx.navigation.NavController
 import com.yourname.womensafety.R
 import com.yourname.womensafety.ui.viewmodels.SplashViewModel
 import kotlinx.coroutines.delay
+import com.yourname.womensafety.utils.tr
 
 @Composable
 fun AppSplashScreen(navController: NavController) {
@@ -47,14 +48,14 @@ fun AppSplashScreen(navController: NavController) {
         modifier = Modifier
             .fillMaxSize()
             .background(
-                Brush.verticalGradient(listOf(Color.Black, Color(0xFF1A0000), Color.Black))
+                Brush.verticalGradient(listOf(Color(0xFF000000), Color(0xFF080404), Color(0xFF120508)))
             ),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Image(
                 painter = painterResource(id = R.drawable.splash_logo),
-                contentDescription = "Asfalis Logo",
+                contentDescription = "Asfalis Logo".tr(),
                 modifier = Modifier
                     .size(260.dp)
                     .graphicsLayer {
@@ -65,17 +66,15 @@ fun AppSplashScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            Text(
-                text = "ASFALIS",
+            Text(text = "ASFALIS".tr(),
                 color = Color.White,
                 fontSize = 42.sp,
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 6.sp
             )
 
-            Text(
-                text = "Your Safety, Our Priority",
-                color = Color(0xFFE10600).copy(alpha = 0.8f),
+            Text(text = "Your Safety, Our Priority".tr(),
+                color = Color(0xFFE25F71).copy(alpha = 0.8f),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 letterSpacing = 1.sp

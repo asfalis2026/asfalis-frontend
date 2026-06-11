@@ -1,5 +1,6 @@
 package com.yourname.womensafety.ui.screens
 
+import androidx.compose.foundation.border
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -21,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.yourname.womensafety.utils.tr
 
 @Composable
 fun LiveMapScreen(onBack: () -> Unit) {
@@ -59,13 +61,13 @@ fun LiveMapScreen(onBack: () -> Unit) {
                 // Header Overlay
                 Column(modifier = Modifier.statusBarsPadding().padding(horizontal = 24.dp, vertical = 30.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onBack, modifier = Modifier.size(44.dp).clip(CircleShape).background(Color.White.copy(0.1f))) {
+                        IconButton(onClick = onBack, modifier = Modifier.size(44.dp).clip(CircleShape).background(Color(0xFFE25F71).copy(0.25f)).border(1.dp, Color(0xFFE25F71).copy(0.3f), CircleShape)) {
                             Icon(Icons.Default.ArrowBack, "Back", tint = Color.White)
                         }
                         Spacer(Modifier.width(16.dp))
                         Column {
-                            Text("Live Map", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
-                            Text("Your current location", color = Color.Gray, fontSize = 14.sp)
+                            Text("Live Map".tr(), color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
+                            Text("Your current location".tr(), color = Color.Gray, fontSize = 14.sp)
                         }
                     }
                     Spacer(Modifier.height(20.dp))
@@ -107,9 +109,9 @@ fun LiveMapScreen(onBack: () -> Unit) {
                     }
                     Spacer(Modifier.width(16.dp))
                     Column {
-                        Text("Current Location", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        Text("123 Safety Street, Downtown District", color = Color.Gray, fontSize = 14.sp)
-                        Text("Lat: 40.7128° N, Long: 74.0060° W", color = Color.DarkGray, fontSize = 11.sp)
+                        Text("Current Location".tr(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Text("123 Safety Street, Downtown District".tr(), color = Color.Gray, fontSize = 14.sp)
+                        Text("Lat: 40.7128° N, Long: 74.0060° W".tr(), color = Color.DarkGray, fontSize = 11.sp)
                     }
                 }
 
@@ -122,18 +124,18 @@ fun LiveMapScreen(onBack: () -> Unit) {
                         shape = RoundedCornerShape(16.dp),
                         border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(0.08f))
                     ) {
-                        Text("Location sharing is currently off", color = Color.Gray, modifier = Modifier.padding(vertical = 16.dp), textAlign = TextAlign.Center, fontSize = 14.sp)
+                        Text("Location sharing is currently off".tr(), color = Color.Gray, modifier = Modifier.padding(vertical = 16.dp), textAlign = TextAlign.Center, fontSize = 14.sp)
                     }
                     Spacer(Modifier.height(16.dp))
                     Button(
                         onClick = { isSharing = true },
                         modifier = Modifier.fillMaxWidth().height(60.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE10600)),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE25F71)),
                         shape = RoundedCornerShape(18.dp)
                     ) {
                         Icon(Icons.Default.Share, null)
                         Spacer(Modifier.width(12.dp))
-                        Text("Share Live Location", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("Share Live Location".tr(), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
                 } else {
                     SharingOnUI { isSharing = false }
@@ -145,11 +147,11 @@ fun LiveMapScreen(onBack: () -> Unit) {
 
 @Composable
 fun LocationPulseMarker(modifier: Modifier) {
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val scale by infiniteTransition.animateFloat(initialValue = 1f, targetValue = 1.5f, animationSpec = infiniteRepeatable(tween(2000), RepeatMode.Reverse), label = "scale")
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse".tr())
+    val scale by infiniteTransition.animateFloat(initialValue = 1f, targetValue = 1.5f, animationSpec = infiniteRepeatable(tween(2000), RepeatMode.Reverse), label = "scale".tr())
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         Box(modifier = Modifier.size(120.dp).graphicsLayer { scaleX = scale; scaleY = scale }.background(Color.Red.copy(0.12f), CircleShape))
-        Surface(modifier = Modifier.size(75.dp), shape = CircleShape, color = Color(0xFFE10600), shadowElevation = 20.dp) {
+        Surface(modifier = Modifier.size(75.dp), shape = CircleShape, color = Color(0xFFE25F71), shadowElevation = 20.dp) {
             Icon(Icons.Default.Navigation, null, tint = Color.White, modifier = Modifier.padding(20.dp).graphicsLayer(rotationZ = 45f))
         }
     }
@@ -161,7 +163,7 @@ fun GPSBadge() {
         Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF4CAF50)))
             Spacer(Modifier.width(10.dp))
-            Text("GPS Accuracy: High", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text("GPS Accuracy: High".tr(), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -173,8 +175,8 @@ fun SharingOnUI(onStop: () -> Unit) {
             Icon(Icons.Default.Visibility, null, tint = Color.Red)
             Spacer(Modifier.width(12.dp))
             Column {
-                Text("Sharing with 2 contacts", color = Color.White, fontWeight = FontWeight.Bold)
-                Text("Sarah Johnson, Michael Chen", color = Color.Gray, fontSize = 12.sp)
+                Text("Sharing with 2 contacts".tr(), color = Color.White, fontWeight = FontWeight.Bold)
+                Text("Sarah Johnson, Michael Chen".tr(), color = Color.Gray, fontSize = 12.sp)
             }
         }
     }
@@ -182,6 +184,6 @@ fun SharingOnUI(onStop: () -> Unit) {
     OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth().height(60.dp), shape = RoundedCornerShape(18.dp), border = androidx.compose.foundation.BorderStroke(1.5.dp, Color.White.copy(0.2f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) {
         Icon(Icons.Default.StopCircle, null)
         Spacer(Modifier.width(12.dp))
-        Text("Stop Sharing", fontWeight = FontWeight.Bold)
+        Text("Stop Sharing".tr(), fontWeight = FontWeight.Bold)
     }
 }

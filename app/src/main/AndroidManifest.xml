@@ -4,15 +4,26 @@
     <!-- Network -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Phone -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
 
     <!-- Location -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
-    <!-- Foreground Service (background location tracking) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- Background sensor access (accelerometer while screen is off) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />
+    <!-- Wake lock: keeps CPU awake while screen is off so sensors keep firing -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Required on Android 13+ to show the persistent Auto SOS notification -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- ── IoT Wearable (ESP32 Classic Bluetooth) ───────────────────────── -->
     <!-- Legacy permissions required on Android ≤ 11 (API 30) -->
@@ -62,6 +73,23 @@
             android:name=".service.IotWearableService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+
+        <!-- Auto SOS — sensor monitoring foreground service (survives screen lock + tab changes) -->
+        <service
+            android:name=".service.SafetyForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="health" />
+
+        <!-- FileProvider for exporting CSV data -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.yourname.womensafety.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/filepaths" />
+        </provider>
 
     </application>
 

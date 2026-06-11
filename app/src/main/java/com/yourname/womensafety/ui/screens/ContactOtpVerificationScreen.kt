@@ -26,6 +26,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yourname.womensafety.ui.viewmodels.ContactsViewModel
 import kotlinx.coroutines.delay
+import com.yourname.womensafety.utils.tr
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,14 +93,14 @@ fun ContactOtpVerificationScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Verify Phone Number", color = Color.White) },
+                title = { Text("Verify Phone Number".tr(), color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF1A0000)
+                    containerColor = Color(0xFF160E0E)
                 )
             )
         }
@@ -109,7 +110,7 @@ fun ContactOtpVerificationScreen(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        listOf(Color(0xFF1A0000), Color.Black)
+                        listOf(Color(0xFF160E0E), Color.Black)
                     )
                 )
                 .padding(padding)
@@ -123,8 +124,7 @@ fun ContactOtpVerificationScreen(
                 Spacer(Modifier.height(32.dp))
 
                 // Info Section
-                Text(
-                    "We've sent a 6-digit code to:",
+                Text("We\'ve sent a 6-digit code to:".tr(),
                     color = Color.White.copy(0.7f),
                     fontSize = 14.sp,
                     textAlign = TextAlign.Center
@@ -138,8 +138,7 @@ fun ContactOtpVerificationScreen(
                     textAlign = TextAlign.Center
                 )
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    "Ask $name to share the code with you.",
+                Text("Ask ".tr() + name + " to share the code with you.".tr(),
                     color = Color.White.copy(0.6f),
                     fontSize = 13.sp,
                     textAlign = TextAlign.Center
@@ -149,15 +148,13 @@ fun ContactOtpVerificationScreen(
 
                 // Timer Display
                 if (!isExpired) {
-                    Text(
-                        "Code expires in: $timerDisplay",
-                        color = Color(0xFFE10600),
+                    Text("Code expires in: $timerDisplay".tr(),
+                        color = Color(0xFFE25F71),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium
                     )
                 } else {
-                    Text(
-                        "Code expired",
+                    Text("Code expired".tr(),
                         color = Color.Red,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
@@ -177,13 +174,29 @@ fun ContactOtpVerificationScreen(
                         OutlinedTextField(
                             value = char,
                             onValueChange = { newValue ->
-                                if (newValue.length <= 1 && newValue.all { it.isDigit() }) {
-                                    val newCode = otpCode.toMutableList()
-                                    newCode[index] = newValue
-                                    otpCode = newCode
-                                    contactsViewModel.clearError()
-                                    if (newValue.isNotEmpty() && index < 5) {
-                                        focusRequesters[index + 1].requestFocus()
+                                when {
+                                    // Digit entered: fill this box and move forward
+                                    newValue.length == 1 && newValue.all { it.isDigit() } -> {
+                                        val newCode = otpCode.toMutableList()
+                                        newCode[index] = newValue
+                                        otpCode = newCode
+                                        contactsViewModel.clearError()
+                                        if (index < 5) focusRequesters[index + 1].requestFocus()
+                                    }
+                                    // Backspace on filled box: clear it
+                                    newValue.isEmpty() && char.isNotEmpty() -> {
+                                        val newCode = otpCode.toMutableList()
+                                        newCode[index] = ""
+                                        otpCode = newCode
+                                        contactsViewModel.clearError()
+                                    }
+                                    // Backspace on empty box: move focus left and clear that box
+                                    newValue.isEmpty() && char.isEmpty() && index > 0 -> {
+                                        val newCode = otpCode.toMutableList()
+                                        newCode[index - 1] = ""
+                                        otpCode = newCode
+                                        focusRequesters[index - 1].requestFocus()
+                                        contactsViewModel.clearError()
                                     }
                                 }
                             },
@@ -203,10 +216,10 @@ fun ContactOtpVerificationScreen(
                                 unfocusedTextColor = Color.White,
                                 focusedContainerColor = Color.White.copy(0.05f),
                                 unfocusedContainerColor = Color.White.copy(0.05f),
-                                focusedBorderColor = Color(0xFFE10600),
+                                focusedBorderColor = Color(0xFFE25F71),
                                 unfocusedBorderColor = Color.White.copy(0.1f),
                                 errorBorderColor = Color.Red,
-                                cursorColor = Color(0xFFE10600)
+                                cursorColor = Color(0xFFE25F71)
                             ),
                             shape = RoundedCornerShape(12.dp),
                             singleLine = true,
@@ -221,7 +234,7 @@ fun ContactOtpVerificationScreen(
                 errorMessage?.let {
                     Text(
                         it,
-                        color = Color(0xFFE10600),
+                        color = Color(0xFFE25F71),
                         fontSize = 12.sp,
                         modifier = Modifier.padding(horizontal = 16.dp),
                         textAlign = TextAlign.Center
@@ -242,7 +255,7 @@ fun ContactOtpVerificationScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.DeleteSweep, null, tint = Color.Gray, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Clear All", color = Color.Gray, fontSize = 14.sp)
+                        Text("Clear All".tr(), color = Color.Gray, fontSize = 14.sp)
                     }
                 }
 
@@ -259,14 +272,13 @@ fun ContactOtpVerificationScreen(
                         checked = isPrimary,
                         onCheckedChange = { isPrimary = it },
                         colors = CheckboxDefaults.colors(
-                            checkedColor = Color(0xFFE10600),
+                            checkedColor = Color(0xFFE25F71),
                             uncheckedColor = Color.White.copy(0.5f),
                             checkmarkColor = Color.White
                         )
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text(
-                        "Set as primary emergency contact",
+                    Text("Set as primary emergency contact".tr(),
                         color = Color.White.copy(0.8f),
                         fontSize = 14.sp
                     )
@@ -289,7 +301,7 @@ fun ContactOtpVerificationScreen(
                         .padding(horizontal = 16.dp)
                         .height(56.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFE10600),
+                        containerColor = Color(0xFFE25F71),
                         disabledContainerColor = Color.Gray
                     ),
                     shape = RoundedCornerShape(12.dp)
@@ -300,8 +312,7 @@ fun ContactOtpVerificationScreen(
                             modifier = Modifier.size(24.dp)
                         )
                     } else {
-                        Text(
-                            "Verify & Add Contact",
+                        Text("Verify & Add Contact".tr(),
                             color = Color.White,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
@@ -327,7 +338,7 @@ fun ContactOtpVerificationScreen(
                     Text(
                         if (canResend) "Didn't receive code? Resend Code" 
                         else "Resend available in ${remainingSeconds - 270}s",
-                        color = if (canResend) Color(0xFFE10600) else Color.Gray,
+                        color = if (canResend) Color(0xFFE25F71) else Color.Gray,
                         fontSize = 14.sp
                     )
                 }
@@ -336,8 +347,7 @@ fun ContactOtpVerificationScreen(
 
                 // Additional help text
                 if (isExpired) {
-                    Text(
-                        "The code has expired. Please request a new one.",
+                    Text("The code has expired. Please request a new one.".tr(),
                         color = Color.White.copy(0.6f),
                         fontSize = 12.sp,
                         textAlign = TextAlign.Center,

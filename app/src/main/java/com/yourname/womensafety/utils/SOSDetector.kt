@@ -13,8 +13,7 @@ private const val TAG = "SOSDetector"
 
 /**
  * Scaler parameters loaded from scaler_params.json.
- * Normalization formula: normalized = (raw - mean) * scale
- * (Note: this MULTIPLIES by scale, not divides — as per backend's Android_Integration_Guide.md)
+ * Normalization formula: normalized = (raw - mean) / scale
  */
 data class ScalerParams(
     @SerializedName("mean")  val mean: List<Float>,
@@ -40,10 +39,10 @@ class SOSDetector(private val assetManager: AssetManager) {
         /**
          * Danger probability above this triggers the SOS countdown.
          * Model guide: <0.50 = Safe, 0.50–0.85 = Caution, >0.85 = Critical.
-         * We use 0.60 as the operational threshold because real-world phone-shake
+         * We use 0.60f as the operational threshold because real-world phone-shake
          * events reliably score 0.60–0.80 but rarely reach 0.85.
          */
-        const val DANGER_THRESHOLD = 0.60f
+        const val DANGER_THRESHOLD = 0.50f
         private const val MODEL_FILE   = "asfalis_sos_lgb.onnx"
         private const val SCALER_FILE  = "scaler_params.json"
         private const val INPUT_NAME   = "input"
@@ -104,10 +103,22 @@ class SOSDetector(private val assetManager: AssetManager) {
 
             // Output at index 1 is the probability array (zipmap=False)
             // outputProbas[0][1] = P(DANGER class)
-            val outputProbas = results[1].value as Array<FloatArray>
-            val dangerProb = outputProbas[0][1]
+            val rawValue = results[1].value
+            val dangerProb = try {
+                when (rawValue) {
+                    is Array<*> -> (rawValue[0] as FloatArray)[1]
+                    is FloatArray -> rawValue[1]
+                    else -> {
+                        Log.e(TAG, "Unexpected ONNX output type: ${rawValue?.javaClass}")
+                        0.0f
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing ONNX output", e)
+                0.0f
+            }
 
-            Log.d(TAG, "ONNX inference: P(DANGER)=%.4f, P(SAFE)=%.4f".format(dangerProb, outputProbas[0][0]))
+            Log.d(TAG, "ONNX inference: P(DANGER)=%.4f".format(dangerProb))
 
             tensor.close()
             results.close()

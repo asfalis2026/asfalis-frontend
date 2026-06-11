@@ -24,7 +24,7 @@ class AuthInterceptor(
         "auth/resend-otp", "auth/forgot-password", "auth/reset-password",
         "auth/google", "auth/refresh",
         "auth/verify-phone-otp", "auth/login/phone",
-        "health", "device/alert", "protection/train-model"
+        "health", "protection/train-model"
     )
 
     /**
@@ -86,6 +86,12 @@ class AuthInterceptor(
         }
 
         val response = chain.proceed(authenticatedRequest)
+
+        if (response.code == 403) {
+            runBlocking { tokenManager.clearTokens() }
+            SessionManager.onSessionExpired()
+            return response
+        }
 
         if (response.code != 401) return response
 

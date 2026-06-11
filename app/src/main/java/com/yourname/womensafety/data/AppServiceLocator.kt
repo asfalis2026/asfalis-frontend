@@ -2,14 +2,15 @@ package com.yourname.womensafety.data
 
 import android.app.Application
 import android.content.Context
+import com.yourname.womensafety.data.local.AppCache
 import com.yourname.womensafety.data.local.TokenManager
 import com.yourname.womensafety.data.network.RetrofitClient
 import com.yourname.womensafety.data.network.api.*
 import com.yourname.womensafety.data.repository.*
 
 /**
- * Manual service locator — provides all repositories without a DI framework.
- * Call [init] once in Application.onCreate() or lazily before first use.
+ * Manual service locator — provides all repositories and shared services.
+ * Call [init] once in Application.onCreate() before any repository is accessed.
  */
 object AppServiceLocator {
 
@@ -20,6 +21,9 @@ object AppServiceLocator {
     /** Application context — used by ViewModels that need a Context (e.g. IotViewModel). */
     val application: Application get() = _application
 
+    /** DataStore-backed app-level cache for contacts, settings, history, FAQs, user name. */
+    val appCache: AppCache by lazy { AppCache(_application.applicationContext) }
+
     val authRepository: AuthRepository by lazy {
         AuthRepository(
             RetrofitClient.createService<AuthApiService>(_tokenManager),
@@ -28,19 +32,31 @@ object AppServiceLocator {
     }
 
     val userRepository: UserRepository by lazy {
-        UserRepository(RetrofitClient.createService<UserApiService>(_tokenManager))
+        UserRepository(
+            userApi  = RetrofitClient.createService<UserApiService>(_tokenManager),
+            appCache = appCache
+        )
     }
 
     val sosRepository: SosRepository by lazy {
-        SosRepository(RetrofitClient.createService<SosApiService>(_tokenManager))
+        SosRepository(
+            sosApi   = RetrofitClient.createService<SosApiService>(_tokenManager),
+            appCache = appCache
+        )
     }
 
     val contactsRepository: ContactsRepository by lazy {
-        ContactsRepository(RetrofitClient.createService<ContactsApiService>(_tokenManager))
+        ContactsRepository(
+            contactsApi = RetrofitClient.createService<ContactsApiService>(_tokenManager),
+            appCache    = appCache
+        )
     }
 
     val settingsRepository: SettingsRepository by lazy {
-        SettingsRepository(RetrofitClient.createService<SettingsApiService>(_tokenManager))
+        SettingsRepository(
+            settingsApi = RetrofitClient.createService<SettingsApiService>(_tokenManager),
+            appCache    = appCache
+        )
     }
 
     val protectionRepository: ProtectionRepository by lazy {
@@ -52,7 +68,10 @@ object AppServiceLocator {
     }
 
     val supportRepository: SupportRepository by lazy {
-        SupportRepository(RetrofitClient.createService<SupportApiService>(_tokenManager))
+        SupportRepository(
+            supportApi = RetrofitClient.createService<SupportApiService>(_tokenManager),
+            appCache   = appCache
+        )
     }
 
     val deviceRepository: DeviceRepository by lazy {
@@ -60,8 +79,7 @@ object AppServiceLocator {
     }
 
     fun init(context: Context) {
-        _tokenManager  = TokenManager(context.applicationContext)
-        _application   = context.applicationContext as Application
+        _tokenManager = TokenManager(context.applicationContext)
+        _application  = context.applicationContext as Application
     }
 }
-

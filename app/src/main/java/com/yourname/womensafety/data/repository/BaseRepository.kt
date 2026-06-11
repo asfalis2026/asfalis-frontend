@@ -67,7 +67,12 @@ abstract class BaseRepository {
                         val errorCode = body?.resolvedErrorCode ?: "UNKNOWN"
                         val errorMsg  = body?.resolvedErrorMessage ?: "Unknown error"
                         Log.e(TAG, "API Error: $errorCode — $errorMsg")
-                        NetworkResult.Error(errorCode, errorMsg)
+                        NetworkResult.Error(
+                            code = errorCode, 
+                            message = errorMsg,
+                            attemptsRemaining = body?.attemptsRemaining,
+                            secondsRemaining = body?.secondsRemaining
+                        )
                     }
                 } else {
                     // 4xx / 5xx — parse error body
@@ -79,7 +84,12 @@ abstract class BaseRepository {
                     val code    = apiError?.resolvedErrorCode    ?: "HTTP_${response.code()}"
                     val message = apiError?.resolvedErrorMessage  ?: response.message()
                     Log.e(TAG, "HTTP Error: $code — $message")
-                    NetworkResult.Error(code, message)
+                    NetworkResult.Error(
+                        code = code, 
+                        message = message, 
+                        attemptsRemaining = apiError?.attemptsRemaining,
+                        secondsRemaining = apiError?.secondsRemaining
+                    )
                 }
 
             } catch (e: java.net.SocketTimeoutException) {

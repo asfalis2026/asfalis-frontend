@@ -22,6 +22,7 @@ import com.yourname.womensafety.service.IotWearableService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import com.yourname.womensafety.utils.trNonComposable
 
 /**
  * Manages the lifecycle of the ESP32 IoT wearable connection:
