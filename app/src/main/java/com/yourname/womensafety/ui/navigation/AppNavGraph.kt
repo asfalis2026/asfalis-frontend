@@ -20,17 +20,29 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
+import androidx.navigation.navDeepLink
 import com.yourname.womensafety.data.IotAction
 import com.yourname.womensafety.data.IotEventBus
 import com.yourname.womensafety.data.SessionManager
 import com.yourname.womensafety.data.network.RetrofitClient
 import com.yourname.womensafety.ui.screens.*
+import com.yourname.womensafety.ui.screens.AppLockScreen
+import com.yourname.womensafety.utils.tr
 
 @Composable
-fun AppNavGraph() {
-    val navController = rememberNavController()
+fun AppNavGraph(
+    navController: NavHostController = rememberNavController()
+) {
+    var isUnlocked by remember { mutableStateOf(false) }
+
+    if (!isUnlocked) {
+        AppLockScreen(onUnlocked = { isUnlocked = true })
+        return
+    }
+
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val haptic = LocalHapticFeedback.current
@@ -88,6 +100,9 @@ fun AppNavGraph() {
                 is IotAction.ProximityUpdate -> {
                     // Distance updates are handled by IotViewModel — no navigation needed.
                 }
+                is IotAction.LatencyUpdate -> {
+                    // Latency updates are handled by IotViewModel — no navigation needed.
+                }
                 is IotAction.ConnectionFailed -> {
                     // Device was off or out of range — show snackbar with the reason.
                     iotSnackbarHostState.showSnackbar(
@@ -106,15 +121,13 @@ fun AppNavGraph() {
             containerColor = Color(0xFF1A1A1A),
             shape = RoundedCornerShape(16.dp),
             title = {
-                Text(
-                    text = "Session Expired",
+                Text(text = "Session Expired".tr(),
                     color = Color.White,
                     fontWeight = FontWeight.Bold
                 )
             },
             text = {
-                Text(
-                    text = "Your login session has expired. Please log in again to continue.",
+                Text(text = "Your login session has expired. Please log in again to continue.".tr(),
                     color = Color(0xFFAAAAAA)
                 )
             },
@@ -129,9 +142,8 @@ fun AppNavGraph() {
                         }
                     }
                 ) {
-                    Text(
-                        text = "Log In",
-                        color = Color(0xFFE10600),
+                    Text(text = "Log In".tr(),
+                        color = Color(0xFFF22A4F),
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -142,12 +154,12 @@ fun AppNavGraph() {
     val bottomBarScreens = listOf("dashboard", "sos_history", "contacts", "profile")
 
     Scaffold(
-        containerColor = Color.Black,
+        containerColor = com.yourname.womensafety.ui.theme.BgDark,
         snackbarHost = {
             SnackbarHost(hostState = iotSnackbarHostState) { data ->
                 Snackbar(
                     snackbarData = data,
-                    containerColor = Color(0xFF1A1A1A),
+                    containerColor = com.yourname.womensafety.ui.theme.CardBg,
                     contentColor = Color.White,
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -155,18 +167,39 @@ fun AppNavGraph() {
         },
         bottomBar = {
             if (currentRoute in bottomBarScreens) {
-                NavigationBar(
-                    containerColor = Color.Black,
-                    tonalElevation = 0.dp,
-                    modifier = Modifier
-                        .navigationBarsPadding()
-                        .height(80.dp)
+                androidx.compose.foundation.layout.Box(
+                    modifier = androidx.compose.ui.Modifier
+                        .fillMaxWidth()
+                        .background(com.yourname.womensafety.ui.theme.NavBarBg)
                 ) {
+                    // Hair-line top separator
+                    androidx.compose.foundation.layout.Box(
+                        modifier = androidx.compose.ui.Modifier
+                            .fillMaxWidth()
+                            .height(0.5.dp)
+                            .background(
+                                androidx.compose.ui.graphics.Brush.horizontalGradient(
+                                    listOf(
+                                        Color.Transparent,
+                                        com.yourname.womensafety.ui.theme.PinkAccent.copy(0.35f),
+                                        com.yourname.womensafety.ui.theme.PinkAccent.copy(0.35f),
+                                        Color.Transparent
+                                    )
+                                )
+                            )
+                    )
+                    NavigationBar(
+                        containerColor = Color.Transparent,
+                        tonalElevation = 0.dp,
+                        modifier = androidx.compose.ui.Modifier
+                            .navigationBarsPadding()
+                            .height(72.dp)
+                    ) {
                     val items = listOf(
-                        Triple("dashboard", "Home", Icons.Default.Home),
-                        Triple("sos_history", "History", Icons.Default.History),
-                        Triple("contacts", "Trusted", Icons.Default.Groups),
-                        Triple("profile", "Profile", Icons.Default.Person)
+                        Triple("dashboard", "Home".tr(), Icons.Default.Home),
+                        Triple("sos_history", "History".tr(), Icons.Default.History),
+                        Triple("contacts", "Trusted".tr(), Icons.Default.Groups),
+                        Triple("profile", "Profile".tr(), Icons.Default.Person)
                     )
                     items.forEach { (route, label, icon) ->
                         val isSelected = currentRoute == route
@@ -196,7 +229,7 @@ fun AppNavGraph() {
                                                 .width(20.dp)
                                                 .height(3.dp)
                                                 .clip(RoundedCornerShape(10.dp))
-                                                .background(Color(0xFFE10600))
+                                                .background(com.yourname.womensafety.ui.theme.PinkAccent)
                                         )
                                         Spacer(modifier = Modifier.height(4.dp))
                                     }
@@ -205,7 +238,7 @@ fun AppNavGraph() {
                                         imageVector = icon,
                                         contentDescription = label,
                                         modifier = Modifier.size(26.dp),
-                                        tint = if (isSelected) Color(0xFFE10600) else Color.Gray
+                                        tint = if (isSelected) com.yourname.womensafety.ui.theme.PinkAccent else Color.Gray
                                     )
                                 }
                             },
@@ -214,7 +247,7 @@ fun AppNavGraph() {
                                     text = label,
                                     fontSize = 10.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isSelected) Color(0xFFE10600) else Color.Gray
+                                    color = if (isSelected) com.yourname.womensafety.ui.theme.PinkAccent else Color.Gray
                                 )
                             },
                             colors = NavigationBarItemDefaults.colors(
@@ -222,6 +255,7 @@ fun AppNavGraph() {
                             )
                         )
                     }
+                }
                 }
             }
         }
@@ -238,12 +272,16 @@ fun AppNavGraph() {
                 exitTransition = { ExitTransition.None }
             ) {
                 composable("app_splash") { AppSplashScreen(navController) }
+                composable("language_selection") { LanguageSelectionScreen(navController) }
                 composable("onboarding") { OnboardingScreen(navController) }
                 composable("permissions") { PermissionsScreen(navController) }
                 composable("login") { LoginScreen(navController) }
                 composable(
-                    route = "verify_otp/{phone}",
-                    arguments = listOf(navArgument("phone") { type = NavType.StringType })
+                    route = "verify_otp?phone={phone}",
+                    arguments = listOf(navArgument("phone") { 
+                        type = NavType.StringType 
+                        defaultValue = ""
+                    })
                 ) { backStackEntry ->
                     val phone = backStackEntry.arguments?.getString("phone") ?: ""
                     VerifyOTPScreen(navController, phone)
@@ -256,6 +294,17 @@ fun AppNavGraph() {
                     ResetPasswordScreen(navController, phone)
                 }
                 composable("dashboard") { DashboardScreen(navController) }
+                composable("terms") { PrivacyPolicyScreen(navController) }
+                composable(
+                    route = "terms_and_conditions?source={source}",
+                    arguments = listOf(navArgument("source") {
+                        type = NavType.StringType
+                        defaultValue = "login"
+                    })
+                ) { backStackEntry ->
+                    val source = backStackEntry.arguments?.getString("source") ?: "login"
+                    TermsAndConditionsScreen(navController, source)
+                }
                 composable("sos_history") { SOSHistoryScreen(navController) }
                 composable("contacts") { TrustedContactsScreen(navController) }
                 composable(
@@ -278,10 +327,38 @@ fun AppNavGraph() {
                         initialExpiresInSeconds = expiresInSeconds,
                         onBack = { navController.popBackStack() },
                         onVerificationSuccess = {
-                            navController.navigate("contacts") {
-                                popUpTo("contacts") { inclusive = true }
+                            navController.navigate("twilio_setup/$contactId/$phone/$name") {
+                                popUpTo("contacts") { inclusive = false }
                             }
                         }
+                    )
+                }
+                composable(
+                    route = "twilio_setup/{contactId}/{phone}/{name}",
+                    arguments = listOf(
+                        navArgument("contactId") { type = NavType.StringType },
+                        navArgument("phone") { type = NavType.StringType },
+                        navArgument("name") { type = NavType.StringType }
+                    )
+                ) { backStackEntry ->
+                    val contactId = backStackEntry.arguments?.getString("contactId") ?: ""
+                    val phone = backStackEntry.arguments?.getString("phone") ?: ""
+                    val name = backStackEntry.arguments?.getString("name") ?: ""
+                    
+                    val contactsViewModel: com.yourname.womensafety.ui.viewmodels.ContactsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                        factory = com.yourname.womensafety.ui.viewmodels.ContactsViewModel.Factory
+                    )
+                    val contacts by contactsViewModel.contacts.collectAsState()
+                    val contact = contacts.find { it.id == contactId }
+                    
+                    TwilioSetupScreen(
+                        navController = navController,
+                        contactId = contactId,
+                        contactPhone = phone,
+                        contactName = name,
+                        whatsappLink = contact?.whatsappJoinInfo?.whatsappLink,
+                        sandboxCode = contact?.whatsappJoinInfo?.sandboxCode,
+                        twilioNumber = contact?.whatsappJoinInfo?.twilioNumber
                     )
                 }
                 composable("profile") { ProfileScreen(navController) }
@@ -289,6 +366,8 @@ fun AppNavGraph() {
                 composable("privacy_policy") { PrivacyPolicyScreen(navController) }
                 composable("help") { HelpSupportScreen(navController) }
                 composable("about") { AboutAppScreen(navController) }
+                composable("safety_stats") { SafetyStatisticsScreen(navController) }
+                composable("account_security") { AccountSecurityScreen(navController) }
                 composable(
                     route = "sos_alert?triggerType={triggerType}&alertId={alertId}",
                     arguments = listOf(
@@ -301,6 +380,9 @@ fun AppNavGraph() {
                             nullable = true
                             defaultValue = null
                         }
+                    ),
+                    deepLinks = listOf(
+                        navDeepLink { uriPattern = "app://womensafety/sos_alert?triggerType={triggerType}&alertId={alertId}" }
                     )
                 ) { backStackEntry ->
                     val triggerType = backStackEntry.arguments?.getString("triggerType") ?: "manual"
@@ -309,15 +391,15 @@ fun AppNavGraph() {
                         triggerType = triggerType,
                         existingAlertId = alertId,
                         onSafe = {
-                            navController.navigate("dashboard") {
-                                popUpTo("dashboard") { inclusive = true }
-                            }
+                            navController.popBackStack("dashboard", inclusive = false)
                         }
                     )
                 }
                 composable("live_map") {
                     LiveMapScreen(onBack = { navController.popBackStack() })
                 }
+                composable("pricing") { PricingScreen(navController) }
+                composable("premium_features") { PremiumFeaturesScreen(navController) }
             }
         }
     }

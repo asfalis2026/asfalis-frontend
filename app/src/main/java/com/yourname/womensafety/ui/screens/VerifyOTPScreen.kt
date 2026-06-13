@@ -2,7 +2,9 @@ package com.yourname.womensafety.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -28,6 +30,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.yourname.womensafety.ui.viewmodels.AuthViewModel
 import kotlinx.coroutines.delay
+import com.yourname.womensafety.utils.tr
+import com.yourname.womensafety.utils.trNonComposable
 
 @Composable
 fun VerifyOTPScreen(navController: NavController, phoneArg: String) {
@@ -51,7 +55,7 @@ fun VerifyOTPScreen(navController: NavController, phoneArg: String) {
     LaunchedEffect(uiState.isSuccess) {
         if (uiState.isSuccess) {
             navController.navigate("dashboard") {
-                popUpTo("app_splash") { inclusive = true }
+                popUpTo(0) { inclusive = true }
             }
             authViewModel.clearError()
         }
@@ -60,7 +64,7 @@ fun VerifyOTPScreen(navController: NavController, phoneArg: String) {
     // Resend OTP — Twilio re-sends the SMS; just show a confirmation toast
     LaunchedEffect(uiState.otpResent) {
         if (uiState.otpResent) {
-            Toast.makeText(context, "OTP resent via SMS.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "OTP resent via SMS.".trNonComposable(), Toast.LENGTH_SHORT).show()
             authViewModel.clearError()
         }
     }
@@ -74,7 +78,7 @@ fun VerifyOTPScreen(navController: NavController, phoneArg: String) {
     }
 
     val backgroundGradient = Brush.verticalGradient(
-        colors = listOf(Color.Black, Color(0xFF1A0000), Color(0xFF330000))
+        colors = listOf(Color(0xFF000000), Color(0xFF080404), Color(0xFF120508))
     )
 
     Column(
@@ -82,21 +86,26 @@ fun VerifyOTPScreen(navController: NavController, phoneArg: String) {
             .fillMaxSize()
             .background(backgroundGradient)
             .statusBarsPadding()
+            .navigationBarsPadding()
+            .imePadding()
             .padding(horizontal = 24.dp)
+            .verticalScroll(androidx.compose.foundation.rememberScrollState())
     ) {
         IconButton(
             onClick = { navController.popBackStack() },
             modifier = Modifier
                 .padding(top = 16.dp)
+                .size(42.dp)
                 .clip(CircleShape)
-                .background(Color.White.copy(0.08f))
+                .background(Color(0xFFE25F71).copy(0.25f))
+                .border(1.dp, Color(0xFFE25F71).copy(0.3f), CircleShape)
         ) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White, modifier = Modifier.size(20.dp))
         }
 
         Spacer(Modifier.height(32.dp))
-        Text("Verify Phone", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-        Text("OTP sent via SMS to $phoneArg", color = Color.Gray, fontSize = 14.sp)
+        Text("Verify Phone".tr(), color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+        Text("OTP sent via SMS to ".tr() + phoneArg, color = Color.Gray, fontSize = 14.sp)
 
         Spacer(Modifier.height(40.dp))
 
@@ -108,12 +117,26 @@ fun VerifyOTPScreen(navController: NavController, phoneArg: String) {
                 OutlinedTextField(
                     value = char,
                     onValueChange = { newValue ->
-                        if (newValue.length <= 1 && newValue.all { it.isDigit() }) {
-                            val newCode = otpCode.toMutableList()
-                            newCode[index] = newValue
-                            otpCode = newCode
-                            if (newValue.isNotEmpty() && index < 5) {
-                                focusRequesters[index + 1].requestFocus()
+                        when {
+                            // Digit entered: fill this box and move forward
+                            newValue.length == 1 && newValue.all { it.isDigit() } -> {
+                                val newCode = otpCode.toMutableList()
+                                newCode[index] = newValue
+                                otpCode = newCode
+                                if (index < 5) focusRequesters[index + 1].requestFocus()
+                            }
+                            // Backspace on filled box: clear it
+                            newValue.isEmpty() && char.isNotEmpty() -> {
+                                val newCode = otpCode.toMutableList()
+                                newCode[index] = ""
+                                otpCode = newCode
+                            }
+                            // Backspace on empty box: move focus left and clear that box
+                            newValue.isEmpty() && char.isEmpty() && index > 0 -> {
+                                val newCode = otpCode.toMutableList()
+                                newCode[index - 1] = ""
+                                otpCode = newCode
+                                focusRequesters[index - 1].requestFocus()
                             }
                         }
                     },
@@ -133,7 +156,7 @@ fun VerifyOTPScreen(navController: NavController, phoneArg: String) {
                         unfocusedTextColor = Color.White,
                         focusedContainerColor = Color.White.copy(0.05f),
                         unfocusedContainerColor = Color.White.copy(0.05f),
-                        focusedBorderColor = Color(0xFFE10600),
+                        focusedBorderColor = Color(0xFFE25F71),
                         unfocusedBorderColor = Color.White.copy(0.1f)
                     ),
                     shape = RoundedCornerShape(12.dp),
@@ -154,7 +177,7 @@ fun VerifyOTPScreen(navController: NavController, phoneArg: String) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.DeleteSweep, null, tint = Color.Gray, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Clear All", color = Color.Gray, fontSize = 14.sp)
+                Text("Clear All".tr(), color = Color.Gray, fontSize = 14.sp)
             }
         }
 
@@ -162,13 +185,13 @@ fun VerifyOTPScreen(navController: NavController, phoneArg: String) {
 
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             if (ticks > 0) {
-                Text("Resend code in ${ticks}s", color = Color.Gray)
+                Text("Resend code in ".tr() + "${ticks}s", color = Color.Gray)
             } else {
                 TextButton(onClick = {
                     ticks = 60
                     authViewModel.resendOtp(phoneArg)
                 }) {
-                    Text("Resend OTP", color = Color(0xFFE10600), fontWeight = FontWeight.Bold)
+                    Text("Resend OTP".tr(), color = Color(0xFFE25F71), fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -181,12 +204,12 @@ fun VerifyOTPScreen(navController: NavController, phoneArg: String) {
                 if (code.length == 6 && otpCode.all { it.isNotEmpty() }) {
                     authViewModel.verifyPhoneOtp(phoneArg, code)
                 } else {
-                    Toast.makeText(context, "Please enter the 6-digit code", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Please enter the 6-digit code".trNonComposable(), Toast.LENGTH_SHORT).show()
                 }
             },
             enabled = !uiState.isLoading && otpCode.all { it.isNotEmpty() },
             modifier = Modifier.fillMaxWidth().height(56.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE10600)),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE25F71)),
             shape = RoundedCornerShape(14.dp)
         ) {
             if (uiState.isLoading) {
@@ -196,7 +219,7 @@ fun VerifyOTPScreen(navController: NavController, phoneArg: String) {
                     strokeWidth = 2.dp
                 )
             } else {
-                Text("Verify & Finish", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text("Verify & Finish".tr(), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

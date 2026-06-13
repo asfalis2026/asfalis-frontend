@@ -10,7 +10,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.yourname.womensafety.data.AppServiceLocator
 import kotlinx.coroutines.launch
+import com.yourname.womensafety.utils.tr
 
 @Composable
 fun PermissionsScreen(navController: NavController) {
@@ -54,7 +57,7 @@ fun PermissionsScreen(navController: NavController) {
     }
 
     val backgroundGradient = Brush.verticalGradient(
-        colors = listOf(Color.Black, Color(0xFF1A0000), Color(0xFF330000))
+        colors = listOf(Color(0xFF000000), Color(0xFF080404), Color(0xFF120508))
     )
 
     Column(
@@ -72,21 +75,20 @@ fun PermissionsScreen(navController: NavController) {
             modifier = Modifier
                 .size(80.dp)
                 .clip(CircleShape)
-                .background(Color(0xFFE10600).copy(0.15f)),
+                .background(Color(0xFFE25F71).copy(0.15f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Outlined.Shield,
                 contentDescription = null,
-                tint = Color(0xFFE10600),
+                tint = Color(0xFFE25F71),
                 modifier = Modifier.size(40.dp)
             )
         }
 
         Spacer(Modifier.height(24.dp))
 
-        Text(
-            text = "Safety Permissions",
+        Text(text = "Safety Permissions".tr(),
             color = Color.White,
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold
@@ -94,8 +96,7 @@ fun PermissionsScreen(navController: NavController) {
 
         Spacer(Modifier.height(12.dp))
 
-        Text(
-            text = "To keep you safe, ASFALIS needs access to these vital features.",
+        Text(text = "To keep you safe, ASFALIS needs access to these vital features.".tr(),
             color = Color.Gray,
             fontSize = 16.sp,
             textAlign = TextAlign.Center,
@@ -107,13 +108,23 @@ fun PermissionsScreen(navController: NavController) {
         // Permission Items List
         PermissionItem(
             icon = Icons.Outlined.LocationOn,
-            title = "Location Access",
-            desc = "To share your live coordinates with emergency contacts."
+            title = "Location Access".tr(),
+            desc = "To share your live coordinates with emergency contacts.".tr()
         )
         PermissionItem(
             icon = Icons.Outlined.NotificationsActive,
-            title = "Critical Alerts",
-            desc = "To ensure SOS sounds are heard even in silent mode."
+            title = "Critical Alerts".tr(),
+            desc = "To ensure SOS sounds are heard even in silent mode.".tr()
+        )
+        PermissionItem(
+            icon = Icons.Outlined.Phone,
+            title = "Direct Calling".tr(),
+            desc = "To quickly call your trusted contacts during an emergency.".tr()
+        )
+        PermissionItem(
+            icon = Icons.Default.Bluetooth,
+            title = "Nearby Devices".tr(),
+            desc = "To automatically connect with the Asfalis SOS wearable.".tr()
         )
 
         Spacer(Modifier.weight(1f))
@@ -122,21 +133,27 @@ fun PermissionsScreen(navController: NavController) {
         Button(
             onClick = {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                permissionLauncher.launch(
-                    arrayOf(
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.ACCESS_COARSE_LOCATION
-                    )
+                val permissions = mutableListOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                    Manifest.permission.CALL_PHONE
                 )
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+                }
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
+                    permissions.add(Manifest.permission.BLUETOOTH_SCAN)
+                }
+                permissionLauncher.launch(permissions.toTypedArray())
             },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(60.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE10600)),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE25F71)),
             shape = RoundedCornerShape(18.dp)
         ) {
-            Text(
-                text = "Grant All Permissions",
+            Text(text = "Grant All Permissions".tr(),
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
@@ -151,7 +168,7 @@ fun PermissionsScreen(navController: NavController) {
             },
             modifier = Modifier.padding(vertical = 8.dp)
         ) {
-            Text("Maybe Later", color = Color.Gray)
+            Text("Maybe Later".tr(), color = Color.Gray)
         }
 
         Spacer(Modifier.height(20.dp))
@@ -170,7 +187,7 @@ fun PermissionItem(
             .padding(bottom = 32.dp),
         verticalAlignment = Alignment.Top
     ) {
-        Icon(icon, null, tint = Color(0xFFE10600), modifier = Modifier.size(28.dp))
+        Icon(icon, null, tint = Color(0xFFE25F71), modifier = Modifier.size(28.dp))
         Spacer(Modifier.width(16.dp))
         Column {
             Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)

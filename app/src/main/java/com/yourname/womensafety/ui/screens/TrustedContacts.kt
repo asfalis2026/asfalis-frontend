@@ -15,6 +15,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.foundation.border
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -35,6 +38,8 @@ import com.yourname.womensafety.data.SecurityPolicyManager
 import com.yourname.womensafety.data.network.dto.TrustedContact
 import com.yourname.womensafety.ui.components.SecureScreen
 import com.yourname.womensafety.ui.viewmodels.ContactsViewModel
+import com.yourname.womensafety.utils.tr
+import com.yourname.womensafety.utils.trNonComposable
 
 // ─── Country dial-code support ───────────────────────────────────────────────
 
@@ -150,6 +155,7 @@ fun TrustedContactsScreen(navController: NavController) {
     var nameInput by remember { mutableStateOf("") }
     var phoneInput by remember { mutableStateOf("") }
     var relationInput by remember { mutableStateOf("") }
+    var emailInput by remember { mutableStateOf("") }
 
     // Validation error messages (null = no error)
     var nameError by remember { mutableStateOf<String?>(null) }
@@ -167,29 +173,43 @@ fun TrustedContactsScreen(navController: NavController) {
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    listOf(Color.Black, Color(0xFF1a0000), Color(0xFF2d0000))
+                    listOf(Color(0xFF000000), Color(0xFF080404), Color(0xFF120508))
                 )
             )
     ) {
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(id = com.yourname.womensafety.R.drawable.background_image),
+            contentDescription = null,
+            alpha = 0.35f,
+            contentScale = androidx.compose.ui.layout.ContentScale.FillWidth,
+            modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter)
+        )
+        // Overlay to blend the image seamlessly into the background
+        Box(
+            modifier = Modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    colors = listOf(Color(0xFF000000), Color.Transparent, Color(0xFF120508)),
+                    startY = 0f
+                )
+            )
+        )
         Scaffold(
             containerColor = Color.Transparent,
-            bottomBar = {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 24.dp, vertical = 20.dp)
+            floatingActionButton = {
+                val isLimitReached = contacts.size >= 3
+                FloatingActionButton(
+                    onClick = { 
+                        if (isLimitReached) {
+                            android.widget.Toast.makeText(context, "Maximum 3 contacts allowed".trNonComposable(), android.widget.Toast.LENGTH_LONG).show()
+                        } else {
+                            showAddDialog = true 
+                        }
+                    },
+                    containerColor = if (isLimitReached) Color.Gray else Color(0xFFE25F71),
+                    contentColor = if (isLimitReached) Color.DarkGray else Color.White,
+                    shape = CircleShape
                 ) {
-                    Button(
-                        onClick = { showAddDialog = true },
-                        modifier = Modifier.fillMaxWidth().height(58.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC60000)),
-                        shape = RoundedCornerShape(18.dp)
-                    ) {
-                        Icon(Icons.Default.Add, null, tint = Color.White)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Add New Contact", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    }
+                    Icon(Icons.Default.Add, contentDescription = "Add Contact".tr())
                 }
             }
         ) { innerPadding ->
@@ -199,7 +219,7 @@ fun TrustedContactsScreen(navController: NavController) {
                     .statusBarsPadding()
                     .padding(horizontal = 24.dp)
             ) {
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(16.dp))
 
                 Row(
                     modifier = Modifier.padding(vertical = 12.dp),
@@ -207,29 +227,58 @@ fun TrustedContactsScreen(navController: NavController) {
                 ) {
                     IconButton(
                         onClick = { navController.popBackStack() },
-                        modifier = Modifier.size(44.dp).clip(CircleShape).background(Color.White.copy(0.08f))
+                        modifier = Modifier.size(44.dp).clip(CircleShape).background(Color(0xFFE25F71).copy(0.25f)).border(1.dp, Color(0xFFE25F71).copy(0.3f), CircleShape)
                     ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(20.dp))
                     }
                     Spacer(Modifier.width(16.dp))
-                    Text("Trusted Contacts", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                    Text("Trusted Contacts".tr(), color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 }
 
-                Text(
-                    text = "Add people who will receive emergency alerts and your live location",
+                Text(text = "Emergency alerts & live location recipients".tr(),
                     color = Color.Gray,
                     fontSize = 14.sp,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 32.dp),
-                    lineHeight = 20.sp
+                    modifier = Modifier.padding(top = 2.dp, bottom = 12.dp)
                 )
 
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 24.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.White.copy(0.05f))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Outlined.History, null, tint = Color(0xFFE25F71), modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("${contacts.size} " + "Active Contacts".tr(), color = Color.White.copy(0.8f), fontSize = 12.sp)
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.White.copy(0.05f))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text("${emergencyContacts.size} " + "Primary".tr(), color = Color.White.copy(0.8f), fontSize = 12.sp)
+                        Spacer(Modifier.width(6.dp))
+                        Box(modifier = Modifier.size(4.dp).clip(CircleShape).background(Color(0xFFE25F71)))
+                        Spacer(Modifier.width(6.dp))
+                        Text("${otherContacts.size} " + "Secondary".tr(), color = Color.Gray, fontSize = 12.sp)
+                    }
+                }
+
                 errorMessage?.let {
-                    Text(it, color = Color(0xFFE10600), fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
+                    Text(it, color = Color(0xFFE25F71), fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
                 }
 
                 if (isLoading) {
                     Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Color(0xFFE10600), modifier = Modifier.size(32.dp))
+                        CircularProgressIndicator(color = Color(0xFFE25F71), modifier = Modifier.size(32.dp))
                     }
                 }
 
@@ -241,9 +290,11 @@ fun TrustedContactsScreen(navController: NavController) {
                     if (emergencyContacts.isNotEmpty()) {
                         item {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Star, null, tint = Color(0xFFC60000), modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.LocalPolice, null, tint = Color(0xFFE25F71), modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(8.dp))
-                                Text("Primary Contacts", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                Text("PRIMARY GUARDIAN".tr(), color = Color(0xFFE25F71), fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                                Spacer(Modifier.width(16.dp))
+                                Box(modifier = Modifier.height(1.dp).weight(1f).background(Color(0xFFE25F71).copy(0.4f)))
                             }
                         }
                         items(emergencyContacts, key = { it.id }) { contact ->
@@ -259,13 +310,13 @@ fun TrustedContactsScreen(navController: NavController) {
 
                     if (otherContacts.isNotEmpty()) {
                         item {
-                            Text(
-                                "Other Contacts",
-                                color = Color.White,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(top = 16.dp)
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 16.dp)) {
+                                Icon(Icons.Default.Group, null, tint = Color(0xFFE25F71), modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("ADDITIONAL CONTACTS".tr(), color = Color(0xFFE25F71), fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                                Spacer(Modifier.width(16.dp))
+                                Box(modifier = Modifier.height(1.dp).weight(1f).background(Color(0xFFE25F71).copy(0.4f)))
+                            }
                         }
                         items(otherContacts, key = { it.id }) { contact ->
                             ContactApiItem(
@@ -281,7 +332,7 @@ fun TrustedContactsScreen(navController: NavController) {
                     if (!isLoading && contacts.isEmpty()) {
                         item {
                             Box(modifier = Modifier.fillParentMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                                Text("No contacts yet. Add your first trusted contact.", color = Color.Gray, fontSize = 15.sp)
+                                Text("No contacts yet. Add your first trusted contact.".tr(), color = Color.Gray, fontSize = 15.sp)
                             }
                         }
                     }
@@ -293,29 +344,29 @@ fun TrustedContactsScreen(navController: NavController) {
         contactToDelete?.let { contact ->
             AlertDialog(
                 onDismissRequest = { contactToDelete = null },
-                containerColor = Color(0xFF141414),
+                containerColor = Color(0xFF160E0E),
                 shape = RoundedCornerShape(24.dp),
                 icon = {
                     Box(
                         modifier = Modifier.size(48.dp).clip(CircleShape)
-                            .background(Color(0xFFE10600).copy(0.15f)),
+                            .background(Color(0xFFE25F71).copy(0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.PersonRemove, null, tint = Color(0xFFE10600), modifier = Modifier.size(24.dp))
+                        Icon(Icons.Default.PersonRemove, null, tint = Color(0xFFE25F71), modifier = Modifier.size(24.dp))
                     }
                 },
                 title = {
-                    Text("Remove Contact?", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text("Remove Contact?".tr(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 },
                 text = {
-                    Text(
-                        "Remove ${contact.name} (${contact.phone}) from your trusted contacts? They will no longer receive SOS alerts.",
-                        color = Color.Gray, fontSize = 14.sp, lineHeight = 20.sp
-                    )
+                    val textTemplate = "Remove [NAME] from your trusted contacts? They will no longer receive SOS alerts.".tr()
+                    val replacedText = textTemplate.replace("[NAME]", "${contact.name} (${contact.phone})")
+                    Text(replacedText,
+                        color = Color.Gray, fontSize = 14.sp, lineHeight = 20.sp, textAlign = TextAlign.Center)
                 },
                 dismissButton = {
                     TextButton(onClick = { contactToDelete = null }) {
-                        Text("Cancel", color = Color.White.copy(0.7f))
+                        Text("Cancel".tr(), color = Color.White.copy(0.7f))
                     }
                 },
                 confirmButton = {
@@ -324,10 +375,10 @@ fun TrustedContactsScreen(navController: NavController) {
                             contactsViewModel.deleteContact(contact.id)
                             contactToDelete = null
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE10600)),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE25F71)),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("Remove", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("Remove".tr(), color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
             )
@@ -337,6 +388,7 @@ fun TrustedContactsScreen(navController: NavController) {
         contactToEdit?.let { contact ->
             var editNameInput by remember { mutableStateOf(contact.name) }
             var editRelationInput by remember { mutableStateOf(contact.relationship ?: "") }
+            var editEmailInput by remember { mutableStateOf(contact.email ?: "") }
             var editNameError by remember { mutableStateOf<String?>(null) }
 
             Dialog(onDismissRequest = { contactToEdit = null }) {
@@ -344,19 +396,19 @@ fun TrustedContactsScreen(navController: NavController) {
                     modifier = Modifier
                         .width(340.dp)
                         .clip(RoundedCornerShape(24.dp))
-                        .background(Color(0xFF1A0000))
+                        .background(Color(0xFF160E0E))
                         .padding(24.dp)
                 ) {
-                    Text("Edit Contact", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text("Edit Contact".tr(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(20.dp))
 
                         // --- Name ---
                         OutlinedTextField(
                             value = editNameInput,
                             onValueChange = { editNameInput = it; editNameError = null },
-                            label = { Text("Full Name *", color = Color.Gray) },
+                            label = { Text("Full Name *".tr(), color = Color.Gray) },
                             isError = editNameError != null,
-                            supportingText = editNameError?.let { { Text(it, color = Color(0xFFE10600), fontSize = 11.sp) } },
+                            supportingText = editNameError?.let { { Text(it, color = Color(0xFFE25F71), fontSize = 11.sp) } },
                             singleLine = true,
                             colors = outlinedFieldColors(),
                             modifier = Modifier.fillMaxWidth()
@@ -367,8 +419,20 @@ fun TrustedContactsScreen(navController: NavController) {
                         OutlinedTextField(
                             value = editRelationInput,
                             onValueChange = { editRelationInput = it },
-                            label = { Text("Relationship (optional)", color = Color.Gray) },
+                            label = { Text("Relationship (optional)".tr(), color = Color.Gray) },
                             singleLine = true,
+                            colors = outlinedFieldColors(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(12.dp))
+
+                        // --- Email (optional) ---
+                        OutlinedTextField(
+                            value = editEmailInput,
+                            onValueChange = { editEmailInput = it },
+                            label = { Text("Email (optional)".tr(), color = Color.Gray) },
+                            singleLine = true,
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Email),
                             colors = outlinedFieldColors(),
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -379,7 +443,7 @@ fun TrustedContactsScreen(navController: NavController) {
                                 onClick = { contactToEdit = null },
                                 modifier = Modifier.weight(1f),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(0.1f))
-                            ) { Text("Cancel", color = Color.White) }
+                            ) { Text("Cancel".tr(), color = Color.White) }
 
                             Button(
                                 onClick = {
@@ -387,17 +451,18 @@ fun TrustedContactsScreen(navController: NavController) {
                                         editNameError = "Name is required"
                                     } else {
                                         contactsViewModel.updateContact(
-                                            contactId = contact.id,
-                                            name = editNameInput.trim(),
-                                            phone = contact.phone, // pass original phone to satisfy validation
-                                            relationship = editRelationInput.trim().ifEmpty { null }
+                                            contactId    = contact.id,
+                                            name         = editNameInput.trim(),
+                                            phone        = contact.phone,
+                                            relationship = editRelationInput.trim().ifEmpty { null },
+                                            email        = editEmailInput.trim().ifEmpty { null }
                                         )
                                         contactToEdit = null
                                     }
                                 },
                                 modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE10600))
-                            ) { Text("Save", color = Color.White) }
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE25F71))
+                            ) { Text("Save".tr(), color = Color.White) }
                         }
                     }
             }
@@ -426,7 +491,7 @@ fun TrustedContactsScreen(navController: NavController) {
             fun resetDialog() {
                 showAddDialog = false
                 selectedCountry = ALL_COUNTRIES.first()
-                nameInput = ""; phoneInput = ""; relationInput = ""
+                nameInput = ""; phoneInput = ""; relationInput = ""; emailInput = ""
                 nameError = null; phoneError = null
                 countrySearch = ""
             }
@@ -436,19 +501,19 @@ fun TrustedContactsScreen(navController: NavController) {
                         modifier = Modifier
                             .width(340.dp)
                             .clip(RoundedCornerShape(24.dp))
-                            .background(Color(0xFF1A0000))
+                            .background(Color(0xFF160E0E))
                             .padding(24.dp)
                     ) {
-                        Text("Add Contact", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Text("Add Contact".tr(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(20.dp))
 
                         // --- Name ---
                         OutlinedTextField(
                             value = nameInput,
                             onValueChange = { nameInput = it; nameError = null },
-                            label = { Text("Full Name *", color = Color.Gray) },
+                            label = { Text("Full Name *".tr(), color = Color.Gray) },
                             isError = nameError != null,
-                            supportingText = nameError?.let { { Text(it, color = Color(0xFFE10600), fontSize = 11.sp) } },
+                            supportingText = nameError?.let { { Text(it, color = Color(0xFFE25F71), fontSize = 11.sp) } },
                             singleLine = true,
                             colors = outlinedFieldColors(),
                             modifier = Modifier.fillMaxWidth()
@@ -456,7 +521,7 @@ fun TrustedContactsScreen(navController: NavController) {
                         Spacer(Modifier.height(12.dp))
 
                         // --- Phone: country dropdown + local number ---
-                        Text("Phone Number *", color = Color.Gray, fontSize = 12.sp,
+                        Text("Phone Number *".tr(), color = Color.Gray, fontSize = 12.sp,
                             modifier = Modifier.padding(start = 4.dp, bottom = 4.dp))
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -473,12 +538,11 @@ fun TrustedContactsScreen(navController: NavController) {
                                     ),
                                     border = androidx.compose.foundation.BorderStroke(
                                         1.dp,
-                                        if (phoneError != null) Color(0xFFE10600) else Color.White.copy(0.2f)
+                                        if (phoneError != null) Color(0xFFE25F71) else Color.White.copy(0.2f)
                                     ),
                                     contentPadding = PaddingValues(horizontal = 10.dp)
                                 ) {
-                                    Text(
-                                        text = "${selectedCountry.flag} ${selectedCountry.dialCode}",
+                                    Text(text = "${selectedCountry.flag} ${selectedCountry.dialCode}".tr(),
                                         color = Color.White,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Medium
@@ -498,11 +562,10 @@ fun TrustedContactsScreen(navController: NavController) {
                                                     .fillMaxWidth(0.85f)
                                                     .heightIn(max = 480.dp)
                                                     .clip(RoundedCornerShape(20.dp))
-                                                    .background(Color(0xFF1A0000))
+                                                    .background(Color(0xFF160E0E))
                                                     .padding(16.dp)
                                             ) {
-                                                Text(
-                                                    "Select Country",
+                                                Text("Select Country".tr(),
                                                     color = Color.White,
                                                     fontWeight = FontWeight.Bold,
                                                     fontSize = 16.sp
@@ -511,7 +574,7 @@ fun TrustedContactsScreen(navController: NavController) {
                                                 OutlinedTextField(
                                                     value = countrySearch,
                                                     onValueChange = { countrySearch = it },
-                                                    placeholder = { Text("Search country...", color = Color.Gray) },
+                                                    placeholder = { Text("Search country...".tr(), color = Color.Gray) },
                                                     singleLine = true,
                                                     colors = outlinedFieldColors(),
                                                     leadingIcon = {
@@ -522,7 +585,7 @@ fun TrustedContactsScreen(navController: NavController) {
                                                 )
                                                 Spacer(Modifier.height(8.dp))
                                                 val filtered = ALL_COUNTRIES.filter {
-                                                    it.name.contains(countrySearch, ignoreCase = true) ||
+                                                    it.name.tr().contains(countrySearch, ignoreCase = true) ||
                                                     it.dialCode.contains(countrySearch)
                                                 }
                                                 LazyColumn(
@@ -536,7 +599,7 @@ fun TrustedContactsScreen(navController: NavController) {
                                                                 .fillMaxWidth()
                                                                 .clip(RoundedCornerShape(10.dp))
                                                                 .background(
-                                                                    if (isSelected) Color(0xFFE10600).copy(0.15f)
+                                                                    if (isSelected) Color(0xFFE25F71).copy(0.15f)
                                                                     else Color.Transparent
                                                                 )
                                                                 .then(Modifier.clickableNoRipple {
@@ -550,8 +613,8 @@ fun TrustedContactsScreen(navController: NavController) {
                                                         ) {
                                                             Text(country.flag, fontSize = 22.sp)
                                                             Text(
-                                                                country.name,
-                                                                color = if (isSelected) Color(0xFFE10600) else Color.White,
+                                                                country.name.tr(),
+                                                                color = if (isSelected) Color(0xFFE25F71) else Color.White,
                                                                 fontSize = 14.sp,
                                                                 modifier = Modifier.weight(1f)
                                                             )
@@ -572,9 +635,9 @@ fun TrustedContactsScreen(navController: NavController) {
                             OutlinedTextField(
                                 value = phoneInput,
                                 onValueChange = { phoneInput = it.filter { c -> c.isDigit() }; phoneError = null },
-                                placeholder = { Text("9876543210", color = Color.Gray.copy(0.5f), fontSize = 13.sp) },
+                                placeholder = { Text("9876543210".tr(), color = Color.Gray.copy(0.5f), fontSize = 13.sp) },
                                 isError = phoneError != null,
-                                supportingText = phoneError?.let { { Text(it, color = Color(0xFFE10600), fontSize = 11.sp) } },
+                                supportingText = phoneError?.let { { Text(it, color = Color(0xFFE25F71), fontSize = 11.sp) } },
                                 singleLine = true,
                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
                                 colors = outlinedFieldColors(),
@@ -587,8 +650,20 @@ fun TrustedContactsScreen(navController: NavController) {
                         OutlinedTextField(
                             value = relationInput,
                             onValueChange = { relationInput = it },
-                            label = { Text("Relationship (optional)", color = Color.Gray) },
+                            label = { Text("Relationship (optional)".tr(), color = Color.Gray) },
                             singleLine = true,
+                            colors = outlinedFieldColors(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(12.dp))
+
+                        // --- Email (optional) ---
+                        OutlinedTextField(
+                            value = emailInput,
+                            onValueChange = { emailInput = it },
+                            label = { Text("Email (optional)".tr(), color = Color.Gray) },
+                            singleLine = true,
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Email),
                             colors = outlinedFieldColors(),
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -599,24 +674,24 @@ fun TrustedContactsScreen(navController: NavController) {
                                 onClick = { resetDialog() },
                                 modifier = Modifier.weight(1f),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(0.1f))
-                            ) { Text("Cancel", color = Color.White) }
+                            ) { Text("Cancel".tr(), color = Color.White) }
 
                             Button(
                                 onClick = {
                                     if (validate()) {
-                                        // Assemble full E.164 number: dialCode + local digits
                                         val fullPhone = selectedCountry.dialCode + phoneInput.trim()
                                         contactsViewModel.addContact(
-                                            name = nameInput.trim(),
-                                            phone = fullPhone,
-                                            relationship = relationInput.trim().ifEmpty { null }
+                                            name         = nameInput.trim(),
+                                            phone        = fullPhone,
+                                            relationship = relationInput.trim().ifEmpty { null },
+                                            email        = emailInput.trim().ifEmpty { null }
                                         )
                                         resetDialog()
                                     }
                                 },
                                 modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE10600))
-                            ) { Text("Add", color = Color.White) }
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE25F71))
+                            ) { Text("Add".tr(), color = Color.White) }
                         }
                     }
             }
@@ -639,8 +714,22 @@ fun InviteContactDialog(
 ) {
     val context = LocalContext.current
 
+    var userName by remember { mutableStateOf("A user") }
+    val userRepository = com.yourname.womensafety.data.AppServiceLocator.userRepository
+    LaunchedEffect(Unit) {
+        val res = userRepository.getProfile()
+        if (res is com.yourname.womensafety.data.repository.NetworkResult.Success) {
+            userName = res.data?.fullName ?: "A user"
+        } else {
+            val name = com.yourname.womensafety.data.local.AppCache(context).getUserName()
+            if (!name.isNullOrBlank()) {
+                userName = name
+            }
+        }
+    }
+
     val inviteText = buildString {
-        appendLine(contact.inviteMessage ?: "I've added you as a trusted contact in Asfalis.")
+        appendLine(contact.inviteMessage ?: "$userName added you as a trusted contact in Asfalis.")
         contact.whatsappJoinInfo?.let { wa ->
             appendLine()
             appendLine("To receive WhatsApp emergency alerts, save ${wa.twilioNumber} and send: \"${wa.sandboxCode}\"")
@@ -653,18 +742,16 @@ fun InviteContactDialog(
                 modifier = Modifier
                     .width(320.dp)
                     .clip(RoundedCornerShape(24.dp))
-                    .background(Color(0xFF1A0000))
+                    .background(Color(0xFF160E0E))
                     .padding(24.dp)
             ) {
-                Text(
-                    "Notify ${contact.name}?",
+                Text("Notify ".tr() + contact.name + "?",
                     color = Color.White,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    "Send an invite so they can receive WhatsApp emergency alerts.",
+                Text("Send an invite so they can receive WhatsApp emergency alerts.".tr(),
                     color = Color.Gray,
                     fontSize = 14.sp,
                     lineHeight = 20.sp
@@ -682,9 +769,9 @@ fun InviteContactDialog(
                             onDismiss()
                         },
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE10600)),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE25F71)),
                         shape = RoundedCornerShape(12.dp)
-                    ) { Text("Send SMS", color = Color.White, fontSize = 13.sp) }
+                    ) { Text("Send SMS".tr(), color = Color.White, fontSize = 13.sp) }
 
                     // Share
                     Button(
@@ -702,14 +789,14 @@ fun InviteContactDialog(
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(0.1f)),
                         shape = RoundedCornerShape(12.dp)
-                    ) { Text("Share", color = Color.White, fontSize = 13.sp) }
+                    ) { Text("Share".tr(), color = Color.White, fontSize = 13.sp) }
                 }
                 Spacer(Modifier.height(8.dp))
                 TextButton(
                     onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Skip", color = Color.Gray, fontSize = 14.sp)
+                    Text("Skip".tr(), color = Color.Gray, fontSize = 14.sp)
                 }
             }
     }
@@ -720,9 +807,9 @@ fun InviteContactDialog(
 private fun outlinedFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedTextColor = Color.White, unfocusedTextColor = Color.White,
     focusedContainerColor = Color.White.copy(0.05f), unfocusedContainerColor = Color.White.copy(0.05f),
-    focusedBorderColor = Color(0xFFE10600), unfocusedBorderColor = Color.White.copy(0.2f),
-    errorBorderColor = Color(0xFFE10600), errorTextColor = Color.White,
-    errorContainerColor = Color(0xFFE10600).copy(0.05f)
+    focusedBorderColor = Color(0xFFE25F71), unfocusedBorderColor = Color.White.copy(0.2f),
+    errorBorderColor = Color(0xFFE25F71), errorTextColor = Color.White,
+    errorContainerColor = Color(0xFFE25F71).copy(0.05f)
 )
 
 @Composable
@@ -738,129 +825,183 @@ fun ContactApiItem(
         .take(2)
         .joinToString("") { it.first().uppercaseChar().toString() }
         .ifEmpty { "?" }
+        
+    val context = LocalContext.current
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color(0xFF140808).copy(alpha = 0.7f),
-        shape = RoundedCornerShape(18.dp),
-        border = if (isEmergency) androidx.compose.foundation.BorderStroke(1.dp, Color.Red.copy(0.2f)) else null
+        color = Color.Transparent,
+        shape = RoundedCornerShape(16.dp),
+        border = if (isEmergency) androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE25F71)) else androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(0.1f))
     ) {
-        Row(
+        Column(
             modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxWidth()
+                .background(
+                    if (isEmergency) Brush.verticalGradient(listOf(Color(0xFF280808), Color(0xFF140000)))
+                    else Brush.verticalGradient(listOf(Color(0xFF1A1A1A), Color(0xFF0A0A0A)))
+                )
         ) {
-            // Avatar circle
-            Box(
+            Row(
                 modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(if (isEmergency) Color(0xFFC60000) else Color.White.copy(0.1f)),
-                contentAlignment = Alignment.Center
+                    .padding(16.dp)
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.Top
             ) {
-                Text(initials, color = Color.White, fontWeight = FontWeight.Bold)
-            }
-
-            Spacer(Modifier.width(14.dp))
-
-            // Name + badge + phone + relationship  (fills available width)
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                // --- Row 1: Name + badge (single line, badge never wraps vertically) ---
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                // Avatar circle
+                Box(
+                    modifier = Modifier.size(64.dp)
                 ) {
-                    Text(
-                        text = contact.name,
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-                    // Verified / Pending badge — fixed height so it NEVER stretches
-                    val badgeContainerColor = if (contact.isVerified)
-                        Color(0xFF1A4D1A) else Color(0xFF4D2E00)
-                    val badgeTextColor = if (contact.isVerified)
-                        Color(0xFF80FF80) else Color(0xFFFFAA00)
-                    val badgeLabel = if (contact.isVerified) "✓ Verified" else "⚠️ Pending"
-
-                    Surface(
-                        color = badgeContainerColor,
-                        shape = RoundedCornerShape(6.dp)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape)
+                            .background(if (isEmergency) Color.Transparent else Color.White.copy(0.1f))
+                            .border(1.dp, if (isEmergency) Color(0xFFE25F71) else Color.Transparent, CircleShape),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = badgeLabel,
-                            color = badgeTextColor,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                        )
+                        Text(initials, color = if (isEmergency) Color(0xFFFF5555) else Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                     }
-                }
-
-                // --- Row 2: Phone + relationship chip ---
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = contact.phone,
-                        color = Color.Gray,
-                        fontSize = 13.sp
-                    )
-                    contact.relationship?.let { rel ->
-                        Surface(
-                            color = if (isEmergency) Color.Red.copy(0.12f) else Color.White.copy(0.07f),
-                            shape = RoundedCornerShape(12.dp)
+                    if (isEmergency) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = 4.dp, y = (-4).dp)
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFE25F71)),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = rel,
-                                color = if (isEmergency) Color(0xFFFF8080) else Color.Gray,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                            )
+                            Icon(Icons.Default.WorkspacePremium, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
                         }
                     }
                 }
-            }
 
-            // Action buttons column — kept slim
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                if (!isEmergency) {
-                    IconButton(onClick = onSetPrimary, modifier = Modifier.size(34.dp)) {
+                Spacer(Modifier.width(20.dp))
+
+                // Info Column
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Name
+                    Text(
+                        text = contact.name,
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+
+                    // Relationship
+                    if (!contact.relationship.isNullOrBlank()) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color.White.copy(0.1f))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = contact.relationship,
+                                color = Color.White.copy(0.7f),
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                    
+                    // Phone
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Outlined.Phone, null, tint = if (isEmergency) Color(0xFFE25F71) else Color.Gray, modifier = Modifier.size(14.dp))
+                        Text(contact.phone, color = Color.Gray, fontSize = 13.sp)
+                    }
+
+                    // Email
+                    if (!contact.email.isNullOrBlank()) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Outlined.Email, null, tint = if (isEmergency) Color(0xFFE25F71) else Color.Gray, modifier = Modifier.size(14.dp))
+                            Text(contact.email, color = Color.Gray, fontSize = 13.sp, maxLines = 1)
+                        }
+                    }
+
+                    // Status Badge
+                    val isVerified = contact.isVerified
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Icon(
-                            Icons.Default.Star,
-                            contentDescription = "Set Primary",
-                            tint = Color(0xFFFFD700).copy(0.5f),
-                            modifier = Modifier.size(18.dp)
+                            if (isVerified) Icons.Default.CheckCircleOutline else Icons.Default.WarningAmber, 
+                            null, 
+                            tint = if (isVerified) Color(0xFF4CAF50) else Color(0xFFFFC107), 
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = if (isVerified) "VERIFIED" else "PENDING",
+                            color = if (isVerified) Color(0xFF4CAF50) else Color(0xFFFFC107),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp
                         )
                     }
                 }
-                IconButton(onClick = onEditRequest, modifier = Modifier.size(34.dp)) {
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = "Edit",
-                        tint = Color.White.copy(0.7f),
-                        modifier = Modifier.size(18.dp)
-                    )
+
+                Spacer(Modifier.width(8.dp))
+
+                IconButton(onClick = onSetPrimary, modifier = Modifier.size(24.dp)) {
+                    if (isEmergency) {
+                        Icon(Icons.Default.Star, "Primary", tint = Color(0xFFE25F71), modifier = Modifier.size(18.dp))
+                    } else {
+                        Icon(Icons.Default.StarBorder, "Set Primary", tint = Color.Gray, modifier = Modifier.size(18.dp))
+                    }
                 }
-                IconButton(onClick = onDeleteRequest, modifier = Modifier.size(34.dp)) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Delete",
-                        tint = Color.White.copy(0.35f),
-                        modifier = Modifier.size(18.dp)
-                    )
+            }
+            
+            // Bottom Actions Row
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Call
+                Row(
+                    modifier = Modifier.weight(1f).clickable { 
+                        try {
+                            val callIntent = Intent(Intent.ACTION_CALL, Uri.parse("tel:${contact.phone}"))
+                            context.startActivity(callIntent)
+                        } catch (e: SecurityException) {
+                            val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${contact.phone}"))
+                            context.startActivity(dialIntent)
+                        }
+                    }.padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.Phone, null, tint = if (isEmergency) Color(0xFFE25F71) else Color.Gray, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Call".tr(), color = Color.Gray, fontSize = 13.sp)
+                }
+                
+                Box(modifier = Modifier.width(1.dp).height(20.dp).background(Color.White.copy(0.05f)))
+                
+                // Edit
+                Row(
+                    modifier = Modifier.weight(1f).clickable(onClick = onEditRequest).padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.Edit, null, tint = if (isEmergency) Color(0xFFE25F71) else Color.Gray, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Edit".tr(), color = Color.Gray, fontSize = 13.sp)
+                }
+
+                Box(modifier = Modifier.width(1.dp).height(20.dp).background(Color.White.copy(0.05f)))
+
+                // Remove
+                Row(
+                    modifier = Modifier.weight(1f).clickable(onClick = onDeleteRequest).padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.Delete, null, tint = if (isEmergency) Color(0xFFE25F71) else Color.Gray, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Remove".tr(), color = Color.Gray, fontSize = 13.sp)
                 }
             }
         }

@@ -6,7 +6,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.yourname.womensafety.data.AppServiceLocator
 import com.yourname.womensafety.data.network.dto.AddContactRequest
-import com.yourname.womensafety.data.network.dto.AddContactResponse
 import com.yourname.womensafety.data.network.dto.TrustedContact
 import com.yourname.womensafety.data.network.dto.UpdateContactRequest
 import com.yourname.womensafety.data.network.dto.VerifyContactOtpRequest
@@ -24,13 +23,13 @@ class ContactsViewModel(
     private val _contacts = MutableStateFlow<List<TrustedContact>>(emptyList())
     val contacts: StateFlow<List<TrustedContact>> = _contacts
 
+    /** True only during a background network refresh after cached data is shown. */
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage
 
-    /** Set after a successful addContact — UI should navigate to OTP verification. */
     data class OtpVerificationData(
         val contactId: String,
         val phone: String,
@@ -40,21 +39,39 @@ class ContactsViewModel(
     private val _pendingOtpVerification = MutableStateFlow<OtpVerificationData?>(null)
     val pendingOtpVerification: StateFlow<OtpVerificationData?> = _pendingOtpVerification
 
-    /** Load contacts immediately on ViewModel creation — no LaunchedEffect dependency. */
+    /**
+     * Load contacts on creation using cache-first strategy:
+     * 1. Show cached data immediately (no spinner, instant render)
+     * 2. Refresh from network in background (silently update list)
+     */
     init {
         loadContacts()
     }
 
     fun loadContacts() {
         viewModelScope.launch {
-            _isLoading.value = true
+            // Step 1: Populate from cache instantly (no loading indicator needed)
+            val cached = contactsRepository.getCachedContacts()
+            if (!cached.isNullOrEmpty()) {
+                _contacts.value = cached
+                // Show subtle loading only for background refresh, not initial load
+                _isLoading.value = false
+            } else {
+                // No cache — show full loading indicator
+                _isLoading.value = true
+            }
+
+            // Step 2: Background network refresh
             when (val result = contactsRepository.getContacts()) {
                 is NetworkResult.Success -> {
                     _contacts.value = result.data
                     _isLoading.value = false
                 }
                 is NetworkResult.Error -> {
-                    _errorMessage.value = result.message
+                    if (cached.isNullOrEmpty()) {
+                        // Only show error if we have nothing to display
+                        _errorMessage.value = result.message
+                    }
                     _isLoading.value = false
                 }
                 is NetworkResult.Loading -> Unit
@@ -62,28 +79,34 @@ class ContactsViewModel(
         }
     }
 
-    fun addContact(name: String, phone: String, relationship: String? = null) {
+    /**
+     * Adds a new trusted contact.
+     * @param email Optional email address for the contact.
+     */
+    fun addContact(name: String, phone: String, relationship: String? = null, email: String? = null) {
         viewModelScope.launch {
+            if (_contacts.value.size >= 3) {
+                _errorMessage.value = "You can add up to 3 trusted contacts maximum."
+                return@launch
+            }
             _isLoading.value = true
-            Log.d("ContactsViewModel", "addContact called: name=$name, phone=$phone, relationship=$relationship")
+            Log.d("ContactsViewModel", "addContact: name=$name phone=$phone email=$email")
             val request = AddContactRequest(
-                name = name,
-                phone = phone,
-                email = null,
+                name         = name,
+                phone        = phone,
+                email        = email,
                 relationship = relationship,
-                isPrimary = false
+                isPrimary    = false
             )
             when (val result = contactsRepository.addContact(request)) {
                 is NetworkResult.Success -> {
-                    Log.d("ContactsViewModel", "addContact success: contactId=${result.data.contactId}, phone=${result.data.phone}, expiresIn=${result.data.expiresInSeconds}")
-                    // Trigger navigation to OTP verification screen
+                    Log.d("ContactsViewModel", "addContact success: contactId=${result.data.contactId}")
                     _pendingOtpVerification.value = OtpVerificationData(
-                        contactId = result.data.contactId,
-                        phone = result.data.phone,
-                        name = name,
+                        contactId        = result.data.contactId,
+                        phone            = result.data.phone,
+                        name             = name,
                         expiresInSeconds = result.data.expiresInSeconds
                     )
-                    Log.d("ContactsViewModel", "pendingOtpVerification set: ${_pendingOtpVerification.value}")
                     _isLoading.value = false
                 }
                 is NetworkResult.Error -> {
@@ -99,12 +122,11 @@ class ContactsViewModel(
     fun verifyContactOtp(contactId: String, otpCode: String, isPrimary: Boolean = false) {
         viewModelScope.launch {
             _isLoading.value = true
-            Log.d("ContactsViewModel", "verifyContactOtp: contactId=$contactId, otpCode=$otpCode, isPrimary=$isPrimary")
+            Log.d("ContactsViewModel", "verifyContactOtp: contactId=$contactId isPrimary=$isPrimary")
             val request = VerifyContactOtpRequest(contactId, otpCode, isPrimary)
             when (val result = contactsRepository.verifyContactOtp(request)) {
                 is NetworkResult.Success -> {
-                    Log.d("ContactsViewModel", "verifyContactOtp success: contact=${result.data}, isVerified=${result.data.isVerified}")
-                    // Reload all contacts from server to get latest state
+                    Log.d("ContactsViewModel", "verifyContactOtp success: isVerified=${result.data.isVerified}")
                     loadContacts()
                 }
                 is NetworkResult.Error -> {
@@ -141,12 +163,13 @@ class ContactsViewModel(
 
     fun deleteContact(contactId: String) {
         viewModelScope.launch {
+            // Optimistically remove from UI immediately
+            _contacts.value = _contacts.value.filter { it.id != contactId }
             when (contactsRepository.deleteContact(contactId)) {
-                is NetworkResult.Success -> {
-                    _contacts.value = _contacts.value.filter { it.id != contactId }
-                }
-                is NetworkResult.Error -> {
+                is NetworkResult.Success -> Unit  // UI already updated
+                is NetworkResult.Error   -> {
                     _errorMessage.value = "Failed to delete contact"
+                    loadContacts()  // Revert by reloading
                 }
                 is NetworkResult.Loading -> Unit
             }
@@ -157,29 +180,51 @@ class ContactsViewModel(
         viewModelScope.launch {
             when (val result = contactsRepository.setPrimaryContact(contactId)) {
                 is NetworkResult.Success -> {
-                    // Update local list: set the returned contact as primary, clear others
                     _contacts.value = _contacts.value.map { contact ->
                         contact.copy(isPrimary = contact.id == contactId)
                     }
                 }
-                is NetworkResult.Error -> {
-                    _errorMessage.value = result.message
-                }
+                is NetworkResult.Error -> { _errorMessage.value = result.message }
                 is NetworkResult.Loading -> Unit
             }
         }
     }
 
-    fun updateContact(contactId: String, name: String?, phone: String?, relationship: String?) {
+    /**
+     * Updates a contact's name, relationship, and optional email.
+     * @param email Optional new email address.
+     */
+    fun updateContact(
+        contactId: String,
+        name: String?,
+        phone: String?,
+        relationship: String?,
+        email: String? = null
+    ) {
         viewModelScope.launch {
-            val request = UpdateContactRequest(name, phone, relationship)
+            // Optimistic update
+            _contacts.value = _contacts.value.map {
+                if (it.id == contactId) {
+                    it.copy(
+                        name = name ?: it.name,
+                        phone = phone ?: it.phone,
+                        relationship = relationship ?: it.relationship,
+                        email = if (email == "") null else email ?: it.email // handle clear email
+                    )
+                } else it
+            }
+
+            val request = UpdateContactRequest(name, phone, relationship, email)
             when (val result = contactsRepository.updateContact(contactId, request)) {
                 is NetworkResult.Success -> {
                     _contacts.value = _contacts.value.map {
                         if (it.id == contactId) result.data else it
                     }
                 }
-                is NetworkResult.Error -> _errorMessage.value = result.message
+                is NetworkResult.Error   -> {
+                    _errorMessage.value = result.message
+                    loadContacts() // revert on error
+                }
                 is NetworkResult.Loading -> Unit
             }
         }

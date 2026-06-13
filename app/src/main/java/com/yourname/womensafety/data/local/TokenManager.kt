@@ -28,6 +28,7 @@ class TokenManager(private val context: Context) {
         private val USER_ID = stringPreferencesKey("user_id")
         private val IS_LOGGED_IN = booleanPreferencesKey("is_logged_in")
         private val ONBOARDING_COMPLETE = booleanPreferencesKey("onboarding_complete")
+        private val IS_LANGUAGE_SELECTED = booleanPreferencesKey("is_language_selected")
         private val PERMISSIONS_GRANTED = booleanPreferencesKey("permissions_granted")
         private val DEVICE_ID = stringPreferencesKey("device_id")
     }
@@ -77,6 +78,13 @@ class TokenManager(private val context: Context) {
     fun getUserId(): Flow<String?> = context.dataStore.data.map { it[USER_ID] }
 
     // --- ONBOARDING STATE ---
+    fun isLanguageSelected(): Flow<Boolean> =
+        context.dataStore.data.map { it[IS_LANGUAGE_SELECTED] ?: false }
+
+    suspend fun setLanguageSelected() {
+        context.dataStore.edit { it[IS_LANGUAGE_SELECTED] = true }
+    }
+
     fun isOnboardingComplete(): Flow<Boolean> =
         context.dataStore.data.map { it[ONBOARDING_COMPLETE] ?: false }
 

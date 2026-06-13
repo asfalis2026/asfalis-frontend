@@ -6,11 +6,27 @@ data class SosTriggerRequest(
     @SerializedName("trigger_type") val triggerType: String,
     @SerializedName("latitude") val latitude: Double,
     @SerializedName("longitude") val longitude: Double,
-    @SerializedName("accuracy") val accuracy: Float? = null
+    @SerializedName("accuracy") val accuracy: Float? = null,
+    /** Custom SOS message sent directly in the trigger payload so the backend
+     *  does not need to look it up separately from the user profile. */
+    @SerializedName("sos_message") val sosMessage: String? = null
 )
 
 data class SosSendNowRequest(
     @SerializedName("alert_id") val alertId: String
+)
+
+data class SosDeliveryReport(
+    @SerializedName("phone") val phone: String,
+    @SerializedName("delivered") val delivered: Boolean,
+    @SerializedName("status") val status: String,
+    @SerializedName("twilio_sid") val twilioSid: String? = null,
+    @SerializedName("error_code") val errorCode: Int? = null
+)
+
+data class SosSendNowData(
+    @SerializedName("status") val status: String,
+    @SerializedName("delivery_report") val deliveryReport: List<SosDeliveryReport>? = null
 )
 
 data class SosCancelRequest(
@@ -50,9 +66,10 @@ data class SosSafeData(
 )
 
 data class SosHistoryItem(
-    // History endpoint returns "id", trigger returns "alert_id" — handle both
+    // History endpoint returns "id" or "_id", trigger returns "alert_id" — handle all
     @SerializedName("alert_id")        val alertId: String? = null,
     @SerializedName("id")              val id: String? = null,
+    @SerializedName("_id")             val _id: String? = null,
     @SerializedName("trigger_type")    val triggerType: String,
     @SerializedName("address")         val address: String? = null,
     @SerializedName("status")          val status: String,
@@ -62,8 +79,8 @@ data class SosHistoryItem(
     @SerializedName("resolution_type") val resolutionType: String? = null,
     @SerializedName("timezone")        val timezone: String? = null
 ) {
-    /** Resolved display ID — prefers alert_id, falls back to id. */
-    val displayId: String get() = alertId ?: id ?: ""
+    /** Resolved display ID — prefers alert_id, falls back to id or _id. */
+    val displayId: String get() = alertId ?: id ?: _id ?: ""
 }
 
 // Returned by GET /api/sos/countdown/{alertId}

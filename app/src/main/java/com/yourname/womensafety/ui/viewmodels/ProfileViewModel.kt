@@ -34,10 +34,27 @@ class ProfileViewModel(
 
     fun loadProfile(forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            _profileState.value = ProfileUiState.Loading
-            when (val result = userRepository.getProfile(forceRefresh)) {
+            // Instant load from cache to prevent UI lag on fresh start
+            if (!forceRefresh) {
+                val cached = userRepository.getProfile(forceRefresh = false)
+                if (cached is NetworkResult.Success) {
+                    _profileState.value = ProfileUiState.Success(cached.data)
+                } else if (_profileState.value !is ProfileUiState.Success) {
+                    _profileState.value = ProfileUiState.Loading
+                }
+            } else {
+                _profileState.value = ProfileUiState.Loading
+            }
+
+            // Silent background refresh
+            when (val result = userRepository.getProfile(forceRefresh = true)) {
                 is NetworkResult.Success -> _profileState.value = ProfileUiState.Success(result.data)
-                is NetworkResult.Error -> _profileState.value = ProfileUiState.Error(result.message)
+                is NetworkResult.Error -> {
+                    // Only show error if we have no cached data
+                    if (_profileState.value !is ProfileUiState.Success) {
+                        _profileState.value = ProfileUiState.Error(result.message)
+                    }
+                }
                 is NetworkResult.Loading -> Unit
             }
         }

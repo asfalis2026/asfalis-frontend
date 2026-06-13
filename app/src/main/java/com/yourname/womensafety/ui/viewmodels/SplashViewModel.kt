@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import com.yourname.womensafety.utils.trNonComposable
 
 data class SplashDestination(
     val route: String? = null  // null = still loading
@@ -30,11 +31,13 @@ class SplashViewModel(
             // Ensure DataStore has time to settle during cold start
             delay(500)
 
+            val languageSelected = tokenManager.isLanguageSelected().first()
             val onboardingDone = tokenManager.isOnboardingComplete().first()
             val permissionsGranted = tokenManager.arePermissionsGranted().first()
             val loggedIn = tokenManager.isLoggedIn().first()
 
             val route = when {
+                !languageSelected   -> "language_selection"
                 !onboardingDone     -> "onboarding"
                 !permissionsGranted -> "permissions"
                 loggedIn            -> "dashboard"

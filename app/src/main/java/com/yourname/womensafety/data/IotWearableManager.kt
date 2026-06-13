@@ -27,6 +27,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlin.math.pow
 
@@ -59,21 +60,33 @@ class IotWearableManager(
         /** Two presses within this window = double-tap. */
         private const val DOUBLE_TAP_WINDOW_MS = 1_500L
 
+        /**
+         * Grace period after sending APP_TRIGGER_SOS during which a BT drop is
+         * treated as motor-interference noise, not a genuine disconnection.
+         *
+         * WHY: The vibration motor's current spike can corrupt the ESP32 BT serial
+         * buffer causing a brief socket drop on the Android side.  Without this guard
+         * the UI briefly flashes "disconnected" after every SOS trigger, and the
+         * ESP32's own disconnect detection fires the 5-pulse proximity warning.
+         * The auto-reconnect loop recovers silently within a few seconds.
+         */
+        private const val TRIGGER_DISCONNECT_GRACE_MS = 8_000L
+
         // ── Proximity monitoring ───────────────────────────────────────────────
         /** Distance (metres) above which the wearable is considered "too far away". */
         const val PROXIMITY_THRESHOLD_M      = 5f
         /**
          * Total time between the start of consecutive RSSI polls.
-         * Wider window = fewer false triggers when the device briefly goes out of range.
+         * Set to 5 s so that [PROXIMITY_BREACH_COUNT]=2 breaches fire SOS in ~10 s total.
          */
-        private const val PROXIMITY_POLL_INTERVAL_MS  = 10_000L
-        /** BLE scan window per poll — long enough to collect several advertisement packets. */
+        private const val PROXIMITY_POLL_INTERVAL_MS  = 5_000L
+        /** BLE scan window per poll — collects several advertisement packets per cycle. */
         private const val PROXIMITY_SCAN_WINDOW_MS    = 3_000L
         /**
-         * Consecutive out-of-range readings required before SOS fires (~50 s total).
-         * Higher value = more resistant to transient RSSI spikes.
+         * Consecutive out-of-range readings required before SOS fires (~10 s total).
+         * 2 readings × 5 s interval = 10 s sustained breach triggers the SOS countdown.
          */
-        const val PROXIMITY_BREACH_COUNT     = 5
+        const val PROXIMITY_BREACH_COUNT     = 2
         /** Stop collecting RSSI samples early once we have this many per window. */
         private const val PROXIMITY_MAX_SAMPLES = 5
         /** Skip a poll entirely if fewer than this many samples were received. */
@@ -128,8 +141,24 @@ class IotWearableManager(
     /** Coroutine that polls BLE RSSI to estimate distance while the SPP socket is open. */
     @Volatile private var proximityJob: Job? = null
 
+    /** Coroutine that sends PING every 5s while connected to measure latency. */
+    @Volatile private var pingJob: Job? = null
+
     /** Number of consecutive polls where estimated distance exceeded [PROXIMITY_THRESHOLD_M]. */
     @Volatile private var consecutiveBreachCount = 0
+
+    /**
+     * Epoch-millis when the last APP_TRIGGER_SOS was sent to the wearable.
+     * Used to suppress [IotAction.Disconnected] during the motor-interference grace window.
+     * Time when APP_TRIGGER_SOS was last sent to the wearable.
+     */
+    @Volatile private var lastTriggerSentTime = 0L
+
+    /** Time when the last "PING" was sent to the wearable for latency testing. */
+    @Volatile private var pingSentTime = 0L
+
+    /** Prevents double-triggering if BLE scanner and SPP drop both fire proximity SOS. */
+    private val isProximityTriggerActive = AtomicBoolean(false)
 
     // ------------------------------------------------------------------ //
     // Connect & listen                                                    //
@@ -137,21 +166,30 @@ class IotWearableManager(
 
     @SuppressLint("MissingPermission")
     fun startListening(scope: CoroutineScope, savedMac: String) {
-        // ── Command consumer: sends APP_TRIGGER_SOS to wearable when ML/manual SOS fires ──
         commandJob = scope.launch(Dispatchers.IO) {
             IotEventBus.commands.collect { command ->
                 when (command) {
                     is IotCommand.TriggerFeedback -> {
                         if (isCurrentlyConnected && socket != null) {
+                            lastTriggerSentTime = System.currentTimeMillis()
                             try {
                                 socket?.outputStream?.write("APP_TRIGGER_SOS\n".toByteArray())
                                 socket?.outputStream?.flush()
-                                Log.d(TAG, "Sent APP_TRIGGER_SOS to wearable — haptic feedback triggered")
+                                Log.d(TAG, "Sent APP_TRIGGER_SOS to wearable")
                             } catch (e: Exception) {
-                                Log.e(TAG, "Failed to send APP_TRIGGER_SOS to wearable", e)
+                                Log.e(TAG, "Failed to send command to wearable", e)
                             }
-                        } else {
-                            Log.d(TAG, "TriggerFeedback received but wearable not connected — skipped")
+                        }
+                    }
+                    is IotCommand.MeasureLatency -> {
+                        if (isCurrentlyConnected && socket != null) {
+                            pingSentTime = System.currentTimeMillis()
+                            try {
+                                socket?.outputStream?.write("PING\n".toByteArray())
+                                socket?.outputStream?.flush()
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to send PING to wearable", e)
+                            }
                         }
                     }
                 }
@@ -269,14 +307,34 @@ class IotWearableManager(
                     // Cancelled in the finally block when the socket drops.
                     proximityJob?.cancel()
                     consecutiveBreachCount = 0
+                    isProximityTriggerActive.set(false)   // Reset guard — new proximity session starts fresh
                     proximityJob = scope.launch(Dispatchers.IO) { monitorProximity() }
+
+                    // Start the 5-second PING loop for latency measurement
+                    pingJob?.cancel()
+                    pingJob = scope.launch(Dispatchers.IO) {
+                        while (isActive && isCurrentlyConnected) {
+                            delay(5_000L)
+                            IotEventBus.sendCommand(IotCommand.MeasureLatency)
+                        }
+                    }
 
                     val reader = BufferedReader(InputStreamReader(localSocket!!.inputStream))
                     while (isActive) {
                         val line = reader.readLine() ?: break
-                        if (line.trim() == TRIGGER_FRAME) {
+                        val cleanLine = line.trim()
+                        if (cleanLine == TRIGGER_FRAME) {
                             Log.d(TAG, "ESP32 button press received")
+                            // Open the grace window NOW — the ESP32 fires its own 3-pulse motor
+                            // feedback synchronously on button press, which can drop the SPP
+                            // socket before we even send APP_TRIGGER_SOS back.  Without this
+                            // stamp the finally block would treat that drop as a proximity breach.
+                            lastTriggerSentTime = System.currentTimeMillis()
                             handleButtonPress(scope, savedMac)
+                        } else if (cleanLine == "PONG") {
+                            val latency = System.currentTimeMillis() - pingSentTime
+                            Log.i(TAG, "ESP32 PONG received. Latency: ${latency}ms")
+                            IotEventBus.post(IotAction.LatencyUpdate(latency))
                         }
                     }
                     Log.d(TAG, "BT stream ended — will reconnect")
@@ -304,8 +362,14 @@ class IotWearableManager(
                         msg.contains("unable to start") ->
                             "Could not find the SPP service on ESP32. " +
                             "Make sure the firmware calls BluetoothSerial.begin() before advertising."
-                        // read failed — happens when the remote device closes the socket
-                        msg.contains("read failed") || msg.contains("broken pipe") ->
+                        // Transient socket drops — motor interference, remote-initiated close,
+                        // or Android BT stack glitch.  App auto-reconnects; no user action needed.
+                        // "bt socket closed" / "read return: -1" is the exact string Android
+                        // throws when the ESP32's SPP acceptor drops the link (motor spike).
+                        msg.contains("read failed") || msg.contains("broken pipe") ||
+                        msg.contains("bt socket closed") || msg.contains("read return") ||
+                        msg.contains("connection reset") || msg.contains("software caused connection abort") ||
+                        msg.contains("connection abort") ->
                             "Wearable disconnected unexpectedly — will retry…"
                         // Bluetooth was disabled mid-connect
                         msg.contains("bluetooth is not enabled") ||
@@ -314,14 +378,24 @@ class IotWearableManager(
                         else ->
                             "Connection error: ${e.message}. Make sure the device is paired and in range."
                     }
-                    Log.e(TAG, "IOException (${e.message}) — $userMessage")
-                    // Only post ConnectionFailed for errors that the user must act on.
-                    // Transient drops (read failed) silently retry.
-                    val isFatal = !msg.contains("read failed") && !msg.contains("broken pipe")
-                    if (isFatal && !hasEverConnected) {
+                    // Determine if this is recoverable without user interaction.
+                    val isTransient = msg.contains("read failed") || msg.contains("broken pipe") ||
+                                      msg.contains("bt socket closed") || msg.contains("read return") ||
+                                      msg.contains("connection reset") || msg.contains("software caused connection abort") ||
+                                      msg.contains("connection abort")
+                    val isFatal = !isTransient
+                    val msSinceTrigger = System.currentTimeMillis() - lastTriggerSentTime
+                    val inGracePeriod  = msSinceTrigger < TRIGGER_DISCONNECT_GRACE_MS
+                    Log.e(TAG, "IOException (${e.message}) — $userMessage " +
+                            "[transient=$isTransient, grace=$inGracePeriod, ms=$msSinceTrigger]")
+                    if (inGracePeriod) {
+                        // Drop during motor-interference window — suppress all UI events.
+                        // The finally block will also suppress Disconnected for the same reason.
+                        Log.w(TAG, "Suppressing ConnectionFailed: inside trigger grace window.")
+                    } else if (isFatal && !hasEverConnected) {
                         IotEventBus.post(IotAction.ConnectionFailed(userMessage))
-                    } else if (isFatal && hasEverConnected) {
-                        // Show the hint as an error but keep retrying (e.g. busy port)
+                    } else if (isFatal) {
+                        // Show the hint but keep retrying (e.g. busy port after reconnect).
                         IotEventBus.post(IotAction.ConnectionFailed(userMessage))
                     }
                 } catch (e: Exception) {
@@ -341,13 +415,40 @@ class IotWearableManager(
                     // Stop proximity monitoring for this connection cycle.
                     proximityJob?.cancel()
                     proximityJob = null
+                    pingJob?.cancel()
+                    pingJob = null
+                    val snapshotBreachCount = consecutiveBreachCount
                     consecutiveBreachCount = 0
                     // If we were connected when this finally block runs, the socket dropped
                     // unexpectedly (device off, out of range, BT disruption).  Signal the UI
                     // unless stopListening() already cleared the flag for an intentional stop.
                     if (isCurrentlyConnected) {
                         isCurrentlyConnected = false
-                        IotEventBus.post(IotAction.Disconnected)
+                        val msSinceTrigger = System.currentTimeMillis() - lastTriggerSentTime
+                        when {
+                            msSinceTrigger < TRIGGER_DISCONNECT_GRACE_MS -> {
+                                // BT dropped right after a trigger — motor interference.
+                                // Suppress all UI events; auto-reconnect handles recovery.
+                                Log.w(TAG, "BT dropped ${msSinceTrigger}ms after trigger — " +
+                                        "suppressing Disconnected (motor interference grace window).")
+                            }
+                            !IotSosTracker.isInHardwareCooldown() -> {
+                                // Per trigger_mechanism.md: a full BT drop outside the grace
+                                // window is itself a proximity breach — start SOS countdown.
+                                // This covers the case where the user walks out of Classic BT
+                                // range before BLE RSSI polls accumulate 5 consecutive breaches.
+                                Log.w(TAG, "Full BT drop ($snapshotBreachCount prior breach readings) " +
+                                        "outside grace window — treating as proximity breach.")
+                                scope.launch { triggerProximitySos() }
+                            }
+                            else -> {
+                                // Hardware cooldown is active (SOS was just dispatched).
+                                // Don't double-trigger; just tell the UI the device disconnected.
+                                Log.w(TAG, "Full BT drop but hardware cooldown active — " +
+                                        "posting Disconnected only.")
+                                IotEventBus.post(IotAction.Disconnected)
+                            }
+                        }
                     }
                     runCatching { localSocket?.close() }
                     socket = null
@@ -367,14 +468,22 @@ class IotWearableManager(
         lastPressTime   = now
 
         if (isDoubleTap) {
-            // Cancel any in-flight single-tap coroutine before handling the double-tap.
-            // This is the key fix: if the user presses once (triggering SOS) and then
-            // double-taps to cancel within the countdown, the first press of the
-            // cancel double-tap was queued as a single-tap.  Cancelling it here
-            // ensures no spurious second SOS is created.
-            pendingSingleTapJob?.cancel()
-            pendingSingleTapJob = null
-            scope.launch { handleDoubleTap() }
+            if (IotSosTracker.isActiveOrRecentlyDispatched()) {
+                // Genuine cancel double-tap — SOS is active or was recently dispatched.
+                // Cancel any in-flight single-tap coroutine before handling the double-tap:
+                // if the user presses once (triggering SOS) and then double-taps to cancel
+                // within the countdown, the first press of the cancel double-tap was queued
+                // as a single-tap.  Cancelling it here ensures no spurious second SOS is created.
+                pendingSingleTapJob?.cancel()
+                pendingSingleTapJob = null
+                scope.launch { handleDoubleTap() }
+            } else {
+                // No active SOS — this is most likely micro-switch bounce (the switch
+                // can bounce up to 80–100 ms, generating a second BT frame that looks
+                // like a double-tap) or panic mashing before the SOS has dispatched.
+                // Do NOT cancel the pending single-tap trigger — let it fire.
+                Log.d(TAG, "Double-tap detected but no active SOS — treating as bounce, ignoring cancel")
+            }
         } else {
             // Delay execution by the full double-tap window before committing to a
             // single-tap SOS trigger.  A subsequent second press arriving within that
@@ -507,6 +616,7 @@ class IotWearableManager(
                         }
                         override fun onScanFailed(errorCode: Int) {
                             Log.e(TAG, "BLE scan failed errorCode=$errorCode")
+                            runCatching { leScanner.stopScan(this) }
                             if (!cont.isCompleted) cont.resume(Unit)
                         }
                     }
@@ -541,6 +651,13 @@ class IotWearableManager(
                     Log.d(TAG, "Breach counter reset from $consecutiveBreachCount → 0 by close-by guard")
                     consecutiveBreachCount = 0
                 }
+                // Change C: Strong RSSI confirms device is physically close — safe to allow
+                // future proximity triggers. Reset the guard that was latched by a prior
+                // proximity SOS so a new separation event can be detected correctly.
+                if (isProximityTriggerActive.get()) {
+                    Log.i(TAG, "Strong RSSI: device confirmed close — releasing proximity trigger guard")
+                    isProximityTriggerActive.set(false)
+                }
                 IotEventBus.post(IotAction.ProximityUpdate(approxDist.coerceAtMost(PROXIMITY_THRESHOLD_M - 1f)))
                 delay(PROXIMITY_POLL_INTERVAL_MS - PROXIMITY_SCAN_WINDOW_MS)
                 continue
@@ -570,6 +687,15 @@ class IotWearableManager(
                     Log.d(TAG, "Back in range (%.1fm) — resetting breach counter from $consecutiveBreachCount".format(dist))
                 }
                 consecutiveBreachCount = 0
+                // Change B: Device confirmed back within range by BLE distance formula.
+                // Release the proximity trigger guard so a future genuine separation event
+                // can trigger a new SOS.  The guard was intentionally left latched after
+                // triggerProximitySos() to prevent repeated SOS while the device remained
+                // out of range — resetting it here (and only here) is the correct policy.
+                if (isProximityTriggerActive.get()) {
+                    Log.i(TAG, "Device back in range (%.1fm) — releasing proximity trigger guard".format(dist))
+                    isProximityTriggerActive.set(false)
+                }
             }
 
             delay(PROXIMITY_POLL_INTERVAL_MS - PROXIMITY_SCAN_WINDOW_MS)
@@ -594,21 +720,33 @@ class IotWearableManager(
      * screen — giving the user a chance to cancel before contacts are notified.
      */
     private suspend fun triggerProximitySos() {
-        val location = getLastKnownLocation()
-        when (val result = sosRepository.triggerSos(
-            triggerType = "hardware_distress",
-            latitude    = location?.latitude  ?: 0.0,
-            longitude   = location?.longitude ?: 0.0
-        )) {
-            is NetworkResult.Success -> {
-                val alertId = result.data.alertId
-                IotSosTracker.onHardwareAlertCreated(alertId)
-                IotEventBus.post(IotAction.Triggered(alertId))
-                Log.w(TAG, "Proximity SOS triggered — alertId=$alertId")
+        if (!isProximityTriggerActive.compareAndSet(false, true)) {
+            Log.w(TAG, "triggerProximitySos called but already triggering")
+            return
+        }
+        try {
+            val location = getLastKnownLocation()
+            when (val result = sosRepository.triggerSos(
+                triggerType = "hardware_distress",
+                latitude    = location?.latitude  ?: 0.0,
+                longitude   = location?.longitude ?: 0.0
+            )) {
+                is NetworkResult.Success -> {
+                    val alertId = result.data.alertId
+                    IotSosTracker.onHardwareAlertCreated(alertId)
+                    IotEventBus.post(IotAction.Triggered(alertId))
+                    Log.w(TAG, "Proximity SOS triggered — alertId=$alertId")
+                }
+                is NetworkResult.Error ->
+                    Log.e(TAG, "Proximity SOS failed: [${result.code}] ${result.message}")
+                is NetworkResult.Loading -> Unit
             }
-            is NetworkResult.Error ->
-                Log.e(TAG, "Proximity SOS failed: [${result.code}] ${result.message}")
-            is NetworkResult.Loading -> Unit
+        } finally {
+            // Change A: Guard intentionally NOT released here.
+            // Releasing it immediately after the network call (1–3 s) would allow the
+            // next BLE poll cycle (~10 s with BREACH_COUNT=2) to fire a second SOS while
+            // the device is still out of range.  The flag is reset only when the device
+            // physically returns within range (in monitorProximity) or the service stops.
         }
     }
 
@@ -644,7 +782,13 @@ class IotWearableManager(
         isCurrentlyConnected = false
         proximityJob?.cancel()
         proximityJob = null
+        pingJob?.cancel()
+        pingJob = null
         consecutiveBreachCount = 0
+        // Change D: Reset the proximity trigger guard so the next service session
+        // (e.g. after START_STICKY restart) starts with a clean state and can detect
+        // a fresh proximity breach without the prior session's latch blocking it.
+        isProximityTriggerActive.set(false)
         pendingSingleTapJob?.cancel()
         pendingSingleTapJob = null
         commandJob?.cancel()
@@ -658,6 +802,3 @@ class IotWearableManager(
         Log.d(TAG, "Bluetooth listener stopped")
     }
 }
-
-
-

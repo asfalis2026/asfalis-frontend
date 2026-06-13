@@ -2,7 +2,9 @@ package com.yourname.womensafety.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -11,6 +13,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,6 +36,8 @@ import com.yourname.womensafety.ui.viewmodels.AuthViewModel
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.style.TextOverflow
+import com.yourname.womensafety.utils.tr
+import com.yourname.womensafety.utils.trNonComposable
 
 @Composable
 fun ResetPasswordScreen(navController: NavController, phoneArg: String) {
@@ -45,6 +51,7 @@ fun ResetPasswordScreen(navController: NavController, phoneArg: String) {
 
     // Password fields
     var newPassword by remember { mutableStateOf("") }
+    var passwordError by remember { mutableStateOf<String?>(null) }
     var confirmPassword by remember { mutableStateOf("") }
     var newPasswordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
@@ -52,7 +59,7 @@ fun ResetPasswordScreen(navController: NavController, phoneArg: String) {
     // Navigate back to login on success
     LaunchedEffect(uiState.isSuccess) {
         if (uiState.isSuccess) {
-            Toast.makeText(context, "Password reset successfully! Please log in.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "Password reset successfully! Please log in.".trNonComposable(), Toast.LENGTH_LONG).show()
             navController.navigate("login") { popUpTo(0) { inclusive = true } }
             authViewModel.clearError()
         }
@@ -67,7 +74,7 @@ fun ResetPasswordScreen(navController: NavController, phoneArg: String) {
     }
 
     val backgroundGradient = Brush.verticalGradient(
-        colors = listOf(Color.Black, Color(0xFF1A0000), Color(0xFF330000))
+        colors = listOf(Color(0xFF000000), Color(0xFF080404), Color(0xFF120508))
     )
 
     Column(
@@ -75,7 +82,10 @@ fun ResetPasswordScreen(navController: NavController, phoneArg: String) {
             .fillMaxSize()
             .background(backgroundGradient)
             .statusBarsPadding()
-            .padding(horizontal = 24.dp),
+            .navigationBarsPadding()
+            .imePadding()
+            .padding(horizontal = 24.dp)
+            .verticalScroll(androidx.compose.foundation.rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Back button
@@ -84,24 +94,24 @@ fun ResetPasswordScreen(navController: NavController, phoneArg: String) {
                 onClick = { navController.popBackStack() },
                 modifier = Modifier
                     .padding(top = 16.dp)
+                    .size(42.dp)
                     .clip(CircleShape)
-                    .background(Color.White.copy(0.08f))
+                    .background(Color(0xFFE25F71).copy(0.25f))
+                    .border(1.dp, Color(0xFFE25F71).copy(0.3f), CircleShape)
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White, modifier = Modifier.size(20.dp))
             }
         }
 
         Spacer(Modifier.height(24.dp))
 
-        Text(
-            text = "Reset Password",
+        Text(text = "Reset Password".tr(),
             color = Color.White,
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold
         )
         Spacer(Modifier.height(6.dp))
-        Text(
-            text = "Enter the OTP sent to $phoneArg,\nthen set your new password.",
+        Text(text = "Enter the OTP sent to $phoneArg,\nthen set your new password.".tr(),
             color = Color.Gray,
             fontSize = 14.sp,
             textAlign = TextAlign.Center,
@@ -112,8 +122,7 @@ fun ResetPasswordScreen(navController: NavController, phoneArg: String) {
         Spacer(Modifier.height(36.dp))
 
         // ── OTP row ──────────────────────────────────────────────────────────
-        Text(
-            "Verification Code",
+        Text("Verification Code".tr(),
             color = Color.Gray,
             fontSize = 12.sp,
             modifier = Modifier
@@ -128,12 +137,26 @@ fun ResetPasswordScreen(navController: NavController, phoneArg: String) {
                 OutlinedTextField(
                     value = char,
                     onValueChange = { newValue ->
-                        if (newValue.length <= 1 && newValue.all { it.isDigit() }) {
-                            val newCode = otpCode.toMutableList()
-                            newCode[index] = newValue
-                            otpCode = newCode
-                            if (newValue.isNotEmpty() && index < 5) {
-                                focusRequesters[index + 1].requestFocus()
+                        when {
+                            // Digit entered: fill this box and move forward
+                            newValue.length == 1 && newValue.all { it.isDigit() } -> {
+                                val newCode = otpCode.toMutableList()
+                                newCode[index] = newValue
+                                otpCode = newCode
+                                if (index < 5) focusRequesters[index + 1].requestFocus()
+                            }
+                            // Backspace on filled box: clear it
+                            newValue.isEmpty() && char.isNotEmpty() -> {
+                                val newCode = otpCode.toMutableList()
+                                newCode[index] = ""
+                                otpCode = newCode
+                            }
+                            // Backspace on empty box: move focus left and clear that box
+                            newValue.isEmpty() && char.isEmpty() && index > 0 -> {
+                                val newCode = otpCode.toMutableList()
+                                newCode[index - 1] = ""
+                                otpCode = newCode
+                                focusRequesters[index - 1].requestFocus()
                             }
                         }
                     },
@@ -153,7 +176,7 @@ fun ResetPasswordScreen(navController: NavController, phoneArg: String) {
                         unfocusedTextColor = Color.White,
                         focusedContainerColor = Color.White.copy(0.05f),
                         unfocusedContainerColor = Color.White.copy(0.05f),
-                        focusedBorderColor = Color(0xFFE10600),
+                        focusedBorderColor = Color(0xFFE25F71),
                         unfocusedBorderColor = Color.White.copy(0.1f)
                     ),
                     shape = RoundedCornerShape(12.dp),
@@ -167,10 +190,13 @@ fun ResetPasswordScreen(navController: NavController, phoneArg: String) {
         // ── New password ──────────────────────────────────────────────────────
         OutlinedTextField(
             value = newPassword,
-            onValueChange = { newPassword = it },
+            onValueChange = { 
+                newPassword = it
+                passwordError = null
+            },
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("New Password", color = Color.Gray) },
-            leadingIcon = { Icon(Icons.Default.Lock, null, tint = Color(0xFFE10600)) },
+            label = { Text("New Password".tr(), color = Color.Gray) },
+            leadingIcon = { Icon(Icons.Default.Lock, null, tint = Color(0xFFE25F71)) },
             trailingIcon = {
                 IconButton(onClick = { newPasswordVisible = !newPasswordVisible }) {
                     Icon(
@@ -181,18 +207,25 @@ fun ResetPasswordScreen(navController: NavController, phoneArg: String) {
             },
             visualTransformation = if (newPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            isError = passwordError != null,
+            supportingText = passwordError?.let {
+                { Text(it, color = Color(0xFFE25F71), fontSize = 12.sp) }
+            },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = Color.White,
                 unfocusedTextColor = Color.White,
                 focusedContainerColor = Color.White.copy(0.05f),
                 unfocusedContainerColor = Color.White.copy(0.05f),
-                focusedBorderColor = Color(0xFFE10600),
+                focusedBorderColor = Color(0xFFE25F71),
                 unfocusedBorderColor = Color.White.copy(0.1f),
-                cursorColor = Color(0xFFE10600)
+                cursorColor = Color(0xFFE25F71)
             ),
             shape = RoundedCornerShape(14.dp),
             singleLine = true
         )
+
+        Spacer(Modifier.height(8.dp))
+        com.yourname.womensafety.ui.screens.PasswordCriteriaChecklist(password = newPassword)
 
         Spacer(Modifier.height(16.dp))
 
@@ -201,8 +234,8 @@ fun ResetPasswordScreen(navController: NavController, phoneArg: String) {
             value = confirmPassword,
             onValueChange = { confirmPassword = it },
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("Confirm Password", color = Color.Gray) },
-            leadingIcon = { Icon(Icons.Default.Lock, null, tint = Color(0xFFE10600)) },
+            label = { Text("Confirm Password".tr(), color = Color.Gray) },
+            leadingIcon = { Icon(Icons.Default.Lock, null, tint = Color(0xFFE25F71)) },
             trailingIcon = {
                 IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
                     Icon(
@@ -216,7 +249,7 @@ fun ResetPasswordScreen(navController: NavController, phoneArg: String) {
             isError = confirmPassword.isNotEmpty() && confirmPassword != newPassword,
             supportingText = {
                 if (confirmPassword.isNotEmpty() && confirmPassword != newPassword) {
-                    Text("Passwords do not match", color = Color(0xFFE10600), fontSize = 12.sp)
+                    Text("Passwords do not match".tr(), color = Color(0xFFE25F71), fontSize = 12.sp)
                 }
             },
             colors = OutlinedTextFieldDefaults.colors(
@@ -224,9 +257,9 @@ fun ResetPasswordScreen(navController: NavController, phoneArg: String) {
                 unfocusedTextColor = Color.White,
                 focusedContainerColor = Color.White.copy(0.05f),
                 unfocusedContainerColor = Color.White.copy(0.05f),
-                focusedBorderColor = Color(0xFFE10600),
+                focusedBorderColor = Color(0xFFE25F71),
                 unfocusedBorderColor = Color.White.copy(0.1f),
-                cursorColor = Color(0xFFE10600)
+                cursorColor = Color(0xFFE25F71)
             ),
             shape = RoundedCornerShape(14.dp),
             singleLine = true
@@ -240,11 +273,11 @@ fun ResetPasswordScreen(navController: NavController, phoneArg: String) {
                 val code = otpCode.joinToString("")
                 when {
                     code.length < 6 ->
-                        Toast.makeText(context, "Enter the 6-digit OTP", Toast.LENGTH_SHORT).show()
-                    newPassword.length < 8 ->
-                        Toast.makeText(context, "Password must be at least 8 characters", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Enter the 6-digit OTP".trNonComposable(), Toast.LENGTH_SHORT).show()
+                    newPassword.length < 8 || !newPassword.any { it.isUpperCase() } || !newPassword.any { it.isLowerCase() } || !newPassword.any { it.isDigit() } ->
+                        passwordError = "Password must be at least 8 characters with uppercase, lowercase, and digit.".trNonComposable()
                     newPassword != confirmPassword ->
-                        Toast.makeText(context, "Passwords do not match", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Passwords do not match".trNonComposable(), Toast.LENGTH_SHORT).show()
                     else ->
                         authViewModel.resetPassword(phoneArg, code, newPassword)
                 }
@@ -253,7 +286,7 @@ fun ResetPasswordScreen(navController: NavController, phoneArg: String) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE10600)),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE25F71)),
             shape = RoundedCornerShape(16.dp)
         ) {
             if (uiState.isLoading) {
@@ -263,7 +296,7 @@ fun ResetPasswordScreen(navController: NavController, phoneArg: String) {
                     strokeWidth = 2.dp
                 )
             } else {
-                Text("Reset Password", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("Reset Password".tr(), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
             }
         }
     }
