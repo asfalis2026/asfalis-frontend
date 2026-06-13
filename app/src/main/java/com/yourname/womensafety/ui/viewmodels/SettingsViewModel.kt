@@ -13,6 +13,8 @@ import com.yourname.womensafety.data.network.dto.UserSettings
 import com.yourname.womensafety.data.repository.NetworkResult
 import com.yourname.womensafety.data.repository.SettingsRepository
 import com.yourname.womensafety.data.repository.UserRepository
+import com.yourname.womensafety.utils.LocaleHelper
+import com.yourname.womensafety.utils.LocaleManager
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,6 +53,9 @@ class SettingsViewModel(
     private val _autoSosEnabled = MutableStateFlow(false)
     val autoSosEnabled: StateFlow<Boolean> = _autoSosEnabled
 
+    /** Flag to prevent stale GET responses from reverting local optimistic language changes */
+    private var hasUserChangedLanguage = false
+
     fun loadSettings() {
         viewModelScope.launch {
             // Cache-first: show instantly from disk
@@ -68,6 +73,13 @@ class SettingsViewModel(
                     _settings.value = result.data
                     _autoSosEnabled.value = result.data.autoSosEnabled
                     _isLoading.value = false
+
+                    // Apply language from backend ONLY if the user hasn't overridden it in this session
+                    val frontendCode = LocaleHelper.fromBackendCode(result.data.language)
+                    if (!hasUserChangedLanguage && frontendCode != LocaleManager.currentLanguage.value) {
+                        LocaleManager.setLanguage(frontendCode)
+                        AppServiceLocator.appCache.saveLanguageCode(frontendCode)
+                    }
                 }
                 is NetworkResult.Error -> {
                     if (_settings.value == null) _errorMessage.value = result.message
@@ -75,6 +87,22 @@ class SettingsViewModel(
                 }
                 is NetworkResult.Loading -> Unit
             }
+        }
+    }
+
+    /**
+     * Called immediately when the user taps a language option in Settings.
+     * Fires PUT /settings with just the language field and saves locally.
+     * Does NOT require the main Save button to be pressed.
+     */
+    fun updateLanguage(frontendCode: String) {
+        hasUserChangedLanguage = true
+        viewModelScope.launch {
+            // Save locally first so it survives offline restarts
+            AppServiceLocator.appCache.saveLanguageCode(frontendCode)
+            // Persist to backend — fire-and-forget, failure is non-critical
+            val backendCode = LocaleHelper.toBackendCode(frontendCode)
+            settingsRepository.updateSettings(UpdateSettingsRequest(language = backendCode))
         }
     }
 

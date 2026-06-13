@@ -185,15 +185,15 @@ fun TwilioSetupScreen(
             }
 
             val inviteText = buildString {
-                appendLine("✅ $userName added you as a trusted contact in Asfalis, a personal safety app. You will receive emergency alerts with their location if they trigger an SOS.")
+                appendLine("✅ $userName " + "added you as a trusted contact in Asfalis, a personal safety app. You will receive emergency alerts with their location if they trigger an SOS.".tr())
                 appendLine()
-                appendLine("📱 To receive WhatsApp alerts:")
-                appendLine("1. Save this number: +14155238886")
-                appendLine("2. Send this message on WhatsApp: join something-popular")
+                appendLine("📱 " + "To receive WhatsApp alerts:".tr())
+                appendLine("1. " + "Save this number:".tr() + " +14155238886")
+                appendLine("2. " + "Send this message on WhatsApp:".tr() + " join something-popular")
                 appendLine()
-                appendLine("Quick link: https://wa.me/14155238886?text=join%20something-popular")
+                appendLine("Quick link:".tr() + " https://wa.me/14155238886?text=join%20something-popular")
                 appendLine()
-                appendLine("(Note: You must send the join code first to enable WhatsApp alerts)")
+                appendLine("(Note: You must send the join code first to enable WhatsApp alerts)".tr())
             }
 
             Button(

@@ -38,10 +38,10 @@ class SplashViewModel(
 
             val route = when {
                 !languageSelected   -> "language_selection"
-                !onboardingDone     -> "onboarding".trNonComposable()
-                !permissionsGranted -> "permissions".trNonComposable()
-                loggedIn            -> "dashboard".trNonComposable()
-                else                -> "login".trNonComposable()
+                !onboardingDone     -> "onboarding"
+                !permissionsGranted -> "permissions"
+                loggedIn            -> "dashboard"
+                else                -> "login"
             }
             _destination.value = SplashDestination(route)
 

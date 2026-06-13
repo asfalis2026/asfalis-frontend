@@ -4,6 +4,7 @@ import android.app.Application
 import com.yourname.womensafety.data.AppServiceLocator
 import com.google.firebase.FirebaseApp
 import com.yourname.womensafety.data.network.ApiConstants
+import com.yourname.womensafety.utils.LocaleManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -16,6 +17,15 @@ class AsfalisApplication : Application() {
         super.onCreate()
         FirebaseApp.initializeApp(this)
         AppServiceLocator.init(this)
+
+        // Restore saved language into LocaleManager (fallback for devices where
+        // AppCompatDelegate locale hasn't propagated yet at Application.onCreate time)
+        CoroutineScope(Dispatchers.IO).launch {
+            val savedCode = AppServiceLocator.appCache.getLanguageCode()
+            if (savedCode != "en" && LocaleManager.currentLanguage.value != savedCode) {
+                LocaleManager.setLanguage(savedCode)
+            }
+        }
 
         // Fire-and-forget health ping to wake the Render free-tier server before
         // the user finishes the splash animation (~1.6s). This reduces cold-start

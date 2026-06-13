@@ -304,7 +304,7 @@ private fun StatisticsContent(
             Icon(Icons.Default.Analytics, null, tint = PinkAccent, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
             Column {
-                Text("All time: $totalAll SOS events  •  Showing: ${items.size} in $selectedFilter".tr(),
+                Text("${"All time".tr()}: $totalAll ${"SOS events".tr()}  •  ${"Showing".tr()}: ${items.size} ${"in".tr()} ${selectedFilter.tr()}",
                     color = PinkSoft, fontSize = 12.sp
                 )
             }
@@ -437,7 +437,7 @@ private fun StatisticsContent(
                 }
                 val fraction = if (total > 0) count.toFloat() / total else 0f
                 StatusBar(
-                    label = status.replaceFirstChar { it.uppercase() },
+                    label = status.replaceFirstChar { it.uppercase() }.tr(),
                     count = count,
                     fraction = fraction * animProgress.value,
                     color = color
@@ -867,7 +867,7 @@ private fun ClassificationRadarChart(
     manual: Int, wearable: Int, distress: Int, falls: Int, shakes: Int, animProgress: Float
 ) {
     val maxVal = maxOf(manual, wearable, distress, falls, shakes).toFloat().coerceAtLeast(1f)
-    val labels = listOf("Manual".tr(), "Wearable", "Distress", "Falls", "Shakes")
+    val labels = listOf("Manual".tr(), "Wearable".tr(), "Distress".tr(), "Falls".tr(), "Shakes".tr())
     val values = listOf(
         manual / maxVal, wearable / maxVal, distress / maxVal, falls / maxVal, shakes / maxVal
     )

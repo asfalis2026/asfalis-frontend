@@ -119,6 +119,8 @@ fun LoginScreen(navController: NavController) {
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
+                .navigationBarsPadding()
+                .imePadding()
                 .padding(horizontal = 30.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally

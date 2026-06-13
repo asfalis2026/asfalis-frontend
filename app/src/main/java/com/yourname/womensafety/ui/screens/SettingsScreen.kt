@@ -62,7 +62,7 @@ fun SettingsScreen(navController: NavController) {
         if (loadedSettings != null && !settingsSeeded) {
             settingsSeeded = true
             loadedSettings?.let { s ->
-                sensitivity = when (s.shakeSensitivity) { "low" -> "Low".trNonComposable(); "high" -> "High".trNonComposable(); else -> "Medium".trNonComposable() }
+                sensitivity = when (s.shakeSensitivity.lowercase()) { "low" -> "Low"; "high" -> "High"; else -> "Medium" }
                 sosMessage = s.sosMessage
                 autoSosEnabled = s.autoSosEnabled
             }
@@ -197,7 +197,7 @@ fun SettingsScreen(navController: NavController) {
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(
-                        Triple("Low".tr(), "Requires vigorous shake".tr(), Color(0xFF4CAF50)),
+                        Triple("Low", "Requires vigorous shake".tr(), Color(0xFF4CAF50)),
                         Triple("Medium", "Balanced detection".tr(), Color(0xFFFFB74D)),
                         Triple("High", "Triggers easily".tr(), Color(0xFFE25F71))
                     ).forEach { (level, desc, color) ->
@@ -308,7 +308,10 @@ fun SettingsScreen(navController: NavController) {
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(if (isSelected) Color(0xFFE25F71).copy(0.15f) else Color(0xFF1E1416).copy(0.85f))
                                 .border(1.dp, if (isSelected) Color(0xFFE25F71).copy(0.5f) else Color.White.copy(0.07f), RoundedCornerShape(12.dp))
-                                .clickable { LocaleHelper.setLocale(context, code) }
+                                .clickable {
+                                    LocaleHelper.setLocale(context, code)
+                                    settingsViewModel.updateLanguage(code)
+                                }
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -330,7 +333,10 @@ fun SettingsScreen(navController: NavController) {
                             }
                             RadioButton(
                                 selected = isSelected,
-                                onClick = { LocaleHelper.setLocale(context, code) },
+                                onClick = {
+                                    LocaleHelper.setLocale(context, code)
+                                    settingsViewModel.updateLanguage(code)
+                                },
                                 colors = RadioButtonDefaults.colors(
                                     selectedColor = Color(0xFFE25F71),
                                     unselectedColor = Color.Gray
