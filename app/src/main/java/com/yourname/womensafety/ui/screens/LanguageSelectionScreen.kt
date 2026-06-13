@@ -23,12 +23,18 @@ import com.yourname.womensafety.utils.LocaleHelper
 import kotlinx.coroutines.launch
 import java.util.Locale
 
+data class LangOption(val code: String, val displayName: String, val nativeName: String)
+
 @Composable
 fun LanguageSelectionScreen(navController: NavController) {
     val scope = rememberCoroutineScope()
-    var selectedLanguage by remember { mutableStateOf("English") }
+    var selectedCode by remember { mutableStateOf("en") }
     val context = LocalContext.current
-    val languages = listOf("English".tr(), "Bengali", "Hindi")
+    val languages = listOf(
+        LangOption("en", "English", "English"),
+        LangOption("bn", "Bengali", "বাংলা"),
+        LangOption("hi", "Hindi", "हिंदी")
+    )
 
     Box(
         modifier = Modifier
@@ -57,11 +63,11 @@ fun LanguageSelectionScreen(navController: NavController) {
             
             Spacer(modifier = Modifier.height(48.dp))
             
-            languages.forEach { language ->
+            languages.forEach { option ->
                 LanguageOption(
-                    language = language,
-                    isSelected = selectedLanguage == language,
-                    onClick = { selectedLanguage = language }
+                    language = option.nativeName,
+                    isSelected = selectedCode == option.code,
+                    onClick = { selectedCode = option.code }
                 )
                 Spacer(modifier = Modifier.height(16.dp))
             }
@@ -72,8 +78,10 @@ fun LanguageSelectionScreen(navController: NavController) {
                 onClick = {
                     scope.launch {
                         // Apply the locale change at the app level
-                        val code = LocaleHelper.getCodeFromLanguage(selectedLanguage)
-                        LocaleHelper.setLocale(context, code)
+                        LocaleHelper.setLocale(context, selectedCode)
+                        
+                        // Persist locally — user is not logged in yet, no API available
+                        AppServiceLocator.appCache.saveLanguageCode(selectedCode)
                         
                         AppServiceLocator.tokenManager.setLanguageSelected()
                         navController.navigate("onboarding") {

@@ -53,7 +53,7 @@ private fun isoToFlag(iso: String): String = iso.uppercase()
 val CountryDialCode.flag: String get() = isoToFlag(isoCode)
 
 val ALL_COUNTRIES: List<CountryDialCode> = listOf(
-    CountryDialCode("India".trNonComposable(), "+91".trNonComposable(), "IN".trNonComposable()),
+    CountryDialCode("India", "+91", "IN"),
     CountryDialCode("United States", "+1", "US"),
     CountryDialCode("United Kingdom", "+44", "GB"),
     CountryDialCode("Canada", "+1", "CA"),
@@ -359,9 +359,10 @@ fun TrustedContactsScreen(navController: NavController) {
                     Text("Remove Contact?".tr(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 },
                 text = {
-                    Text("Remove ${contact.name} (${contact.phone}) from your trusted contacts? They will no longer receive SOS alerts.".tr(),
-                        color = Color.Gray, fontSize = 14.sp, lineHeight = 20.sp
-                    )
+                    val textTemplate = "Remove [NAME] from your trusted contacts? They will no longer receive SOS alerts.".tr()
+                    val replacedText = textTemplate.replace("[NAME]", "${contact.name} (${contact.phone})")
+                    Text(replacedText,
+                        color = Color.Gray, fontSize = 14.sp, lineHeight = 20.sp, textAlign = TextAlign.Center)
                 },
                 dismissButton = {
                     TextButton(onClick = { contactToDelete = null }) {
@@ -584,7 +585,7 @@ fun TrustedContactsScreen(navController: NavController) {
                                                 )
                                                 Spacer(Modifier.height(8.dp))
                                                 val filtered = ALL_COUNTRIES.filter {
-                                                    it.name.contains(countrySearch, ignoreCase = true) ||
+                                                    it.name.tr().contains(countrySearch, ignoreCase = true) ||
                                                     it.dialCode.contains(countrySearch)
                                                 }
                                                 LazyColumn(
@@ -612,7 +613,7 @@ fun TrustedContactsScreen(navController: NavController) {
                                                         ) {
                                                             Text(country.flag, fontSize = 22.sp)
                                                             Text(
-                                                                country.name,
+                                                                country.name.tr(),
                                                                 color = if (isSelected) Color(0xFFE25F71) else Color.White,
                                                                 fontSize = 14.sp,
                                                                 modifier = Modifier.weight(1f)

@@ -62,7 +62,7 @@ fun SOSHistoryScreen(navController: NavController) {
     val undoCountdown by historyViewModel.undoCountdown.collectAsStateWithLifecycle()
 
     var selectedFilter by remember { mutableStateOf("All") }
-    val filters = listOf("All".tr(), "Sent", "Cancelled", "Failed", "Auto")
+    val filters = listOf("All", "Sent", "Cancelled", "Failed", "Auto")
     var showClearDialog by remember { mutableStateOf(false) }
 
     // Item pending single-delete confirmation
@@ -238,7 +238,7 @@ fun SOSHistoryScreen(navController: NavController) {
                                 ) else null
                             ) {
                                 Text(
-                                    f, color = if (selected) Color.White else Color.Gray,
+                                    f.tr(), color = if (selected) Color.White else Color.Gray,
                                     fontSize = 13.sp,
                                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)

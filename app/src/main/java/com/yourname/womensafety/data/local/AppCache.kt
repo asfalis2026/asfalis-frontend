@@ -50,6 +50,9 @@ class AppCache(private val context: Context) {
          *  Network refreshes filter these out so deleted items never return. */
         private val SOS_DELETED_IDS     = stringPreferencesKey("sos_deleted_ids")
 
+        // ── Language ─────────────────────────────────────────────────────────────
+        private val LANGUAGE_CODE       = stringPreferencesKey("language_code")
+
         // ── App Lock ──────────────────────────────────────────────────────────
         private val APP_LOCK_ENABLED    = booleanPreferencesKey("app_lock_enabled")
         private val APP_LOCK_PIN        = stringPreferencesKey("app_lock_pin")
@@ -215,6 +218,20 @@ class AppCache(private val context: Context) {
     /** Clears the deletion blacklist (used when the user undoes a Clear All). */
     suspend fun clearDeletedSosIds() {
         context.cacheStore.edit { it.remove(SOS_DELETED_IDS) }
+    }
+
+    // ── Language Preference ───────────────────────────────────────────────────
+
+    /**
+     * Returns the locally-saved frontend language code ("en", "hi", "bn").
+     * Used as an offline fallback before the API response is available.
+     */
+    suspend fun getLanguageCode(): String =
+        context.cacheStore.data.map { it[LANGUAGE_CODE] ?: "en" }.first()
+
+    /** Persists the chosen language code locally. */
+    suspend fun saveLanguageCode(code: String) {
+        context.cacheStore.edit { it[LANGUAGE_CODE] = code }
     }
 
     // ── App Lock ──────────────────────────────────────────────────────────────

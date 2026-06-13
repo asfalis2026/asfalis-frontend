@@ -4,6 +4,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -71,7 +72,13 @@ fun RegisterScreen(navController: NavController) {
 
     Box(modifier = Modifier.fillMaxSize().background(backgroundGradient)) {
         Column(
-            modifier = Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 24.dp)
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .imePadding()
+                .padding(horizontal = 24.dp)
+                .verticalScroll(rememberScrollState())
         ) {
             IconButton(
                 onClick = { navController.popBackStack() },
