@@ -36,6 +36,9 @@ import com.yourname.womensafety.data.AppServiceLocator
 import com.yourname.womensafety.data.repository.NetworkResult
 import kotlinx.coroutines.launch
 import java.io.File
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import com.yourname.womensafety.ui.tour.TourTargetRegistry
 
 
 @Composable
@@ -210,8 +213,15 @@ fun AccountSecurityScreen(navController: NavController) {
 
             Spacer(Modifier.height(24.dp))
 
-            // ── App Protection ────────────────────────────────────────────────
+            // ── App Protection ──────────────────────────────────────────────────
             SecuritySectionHeader("App Protection".tr())
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onGloballyPositioned { coords ->
+                        TourTargetRegistry.register("tour_app_lock_card", coords.boundsInWindow())
+                    }
+            ) {
             SecurityCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(modifier = Modifier.size(40.dp).clip(CircleShape)
@@ -241,6 +251,7 @@ fun AccountSecurityScreen(navController: NavController) {
                     )
                 }
             }
+            } // end tour_app_lock_card Box
 
             Spacer(Modifier.height(32.dp))
 

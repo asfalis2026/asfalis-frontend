@@ -57,6 +57,9 @@ class AppCache(private val context: Context) {
         private val APP_LOCK_ENABLED    = booleanPreferencesKey("app_lock_enabled")
         private val APP_LOCK_PIN        = stringPreferencesKey("app_lock_pin")
 
+        // ── App Tour ──────────────────────────────────────────────────────────
+        private val TOUR_COMPLETED      = booleanPreferencesKey("has_completed_tour")
+
         // ── TTLs ─────────────────────────────────────────────────────────────
         const val TTL_CONTACTS_MS    =  5L * 60 * 1_000   //  5 minutes
         const val TTL_SETTINGS_MS    =  5L * 60 * 1_000   //  5 minutes
@@ -248,6 +251,23 @@ class AppCache(private val context: Context) {
 
     suspend fun setAppLockPin(pin: String) {
         context.cacheStore.edit { it[APP_LOCK_PIN] = pin }
+    }
+
+    // ── App Tour ──────────────────────────────────────────────────────────────
+
+    /**
+     * Returns true if the user has already completed (or permanently skipped)
+     * the in-app Quick Tour. Used by [AppNavGraph] to avoid showing it again.
+     */
+    suspend fun getTourCompleted(): Boolean =
+        context.cacheStore.data.map { it[TOUR_COMPLETED] ?: false }.first()
+
+    /**
+     * Persist whether the tour has been completed. Pass [true] when the user
+     * finishes or skips the tour; pass [false] to reset (for testing / replay).
+     */
+    suspend fun setTourCompleted(done: Boolean) {
+        context.cacheStore.edit { it[TOUR_COMPLETED] = done }
     }
 
 }

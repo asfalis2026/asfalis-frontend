@@ -561,7 +561,33 @@ private val hindiTranslations = mapOf(
     "Save this number:" to "यह नंबर सेव करें:",
     "Send this message on WhatsApp:" to "WhatsApp पर यह संदेश भेजें:",
     "Quick link:" to "क्विक लिंक:",
-    "(Note: You must send the join code first to enable WhatsApp alerts)" to "(नोट: WhatsApp अलर्ट सक्षम करने के लिए आपको पहले जॉइन कोड भेजना होगा)"
+    "(Note: You must send the join code first to enable WhatsApp alerts)" to "(नोट: WhatsApp अलर्ट सक्षम करने के लिए आपको पहले जॉइन कोड भेजना होगा)",
+    // ── Tour / Onboarding strings ─────────────────────────────────────────
+    "Replay App Tour" to "ऐप टूर दोबारा चलाएं",
+    "Take the guided walkthrough again" to "फिर से गाइडेड वॉकथ्रू लें",
+    "Step" to "चरण",
+    "of" to "का",
+    "Start Tour" to "टूर शुरू करें",
+    "Get Started 🎉" to "शुरू करें 🎉",
+    "Welcome to Asfalis" to "Asfalis में आपका स्वागत है",
+    "Your personal safety guardian. Quick tour in 30 seconds." to "आपका व्यक्तिगत सुरक्षा सहायक। 30 सेकंड में त्वरित दौरा।",
+    "Your Dashboard" to "आपका डैशबोर्ड",
+    "View protection status and emergency actions." to "सुरक्षा स्थिति और आपातकालीन कार्रवाई देखें।",
+    "Protection" to "सुरक्षा",
+    "Tap to arm or disarm your safety shield." to "अपनी सुरक्षा शील्ड चालू या बंद करने के लिए टैप करें।",
+    "Emergency SOS" to "आपातकालीन SOS",
+    "Send instant SOS alerts with live location." to "लाइव स्थान के साथ तुरंत SOS अलर्ट भेजें।",
+    "Safety Bracelet" to "सुरक्षा ब्रेसलेट",
+    "Connect your ESP32 wearable button." to "अपना ESP32 वेयरेबल बटन कनेक्ट करें।",
+    "Add someone you trust for emergencies." to "किसी विश्वसनीय व्यक्ति को आपातकाल के लिए जोड़ें।",
+    "ML detects danger and alerts automatically." to "ML खतरे का पता लगाता है और स्वतः अलर्ट करता है।",
+    "Adjust how easily Auto SOS activates." to "Auto SOS कितनी आसानी से सक्रिय हो, यह समायोजित करें।",
+    "Filter and review all past SOS events." to "सभी पिछली SOS घटनाओं को फ़िल्टर और समीक्षा करें।",
+    "App Lock" to "ऐप लॉक",
+    "Secure with biometrics or PIN." to "बायोमेट्रिक्स या पिन से सुरक्षित करें।",
+    "You're All Set!" to "आप तैयार हैं!",
+    "Stay safe. Replay this tour from Help anytime. 💖" to "सुरक्षित रहें। इस टूर को कभी भी Help से दोबारा चलाएं। 💖",
+    "Go to Help & Support" to "सहायता और समर्थन पर जाएं"
 )
 
 // Bengali translations
@@ -1116,7 +1142,33 @@ private val bengaliTranslations = mapOf(
     "Save this number:" to "এই নম্বরটি সেভ করুন:",
     "Send this message on WhatsApp:" to "WhatsApp-এ এই মেসেজ পাঠান:",
     "Quick link:" to "কুইক লিঙ্ক:",
-    "(Note: You must send the join code first to enable WhatsApp alerts)" to "(নোট: WhatsApp অ্যালার্ট চালু করতে আপনাকে অবশ্যই প্রথমে জয়েন কোড পাঠাতে হবে)"
+    "(Note: You must send the join code first to enable WhatsApp alerts)" to "(নোট: WhatsApp অ্যালার্ট চালু করতে আপনাকে অবশ্যই প্রথমে জয়েন কোড পাঠাতে হবে)",
+    // ── Tour / Onboarding strings ─────────────────────────────────────────
+    "Replay App Tour" to "অ্যাপ টুর আবার চালু করুন",
+    "Take the guided walkthrough again" to "আবার গাইডেড ওয়ালকথ্রু নিন",
+    "Step" to "ধাপ",
+    "of" to "এর",
+    "Start Tour" to "টুর শুরু করুন",
+    "Get Started 🎉" to "শুরু করুন 🎉",
+    "Welcome to Asfalis" to "Asfalis-এ আপনাকে স্বাগতম",
+    "Your personal safety guardian. Quick tour in 30 seconds." to "আপনার ব্যক্তিগত নিরাপত্তা সহায়ক। 30 সেকেন্ডে দ্রুত দর্শন।",
+    "Your Dashboard" to "আপনার ড্যাশবোর্ড",
+    "View protection status and emergency actions." to "সুরক্ষা অবস্থা এবং জরুরি পদক্ষেপ দেখুন।",
+    "Protection" to "সুরক্ষা",
+    "Tap to arm or disarm your safety shield." to "আপনার সেফ্টি শিল্ড চালু বা বন্ধ করতে ট্যাপ করুন।",
+    "Emergency SOS" to "জরুরি SOS",
+    "Send instant SOS alerts with live location." to "লাইভ লোকেশন সহ তাৎক্ষণিক SOS অ্যালার্ট পাঠান।",
+    "Safety Bracelet" to "সেফ্টি ব্রেসলেট",
+    "Connect your ESP32 wearable button." to "আপনার ESP32 ওয়্যারেবল বাটন সংযুক্ত করুন।",
+    "Add someone you trust for emergencies." to "জরুরি পরিস্থিতিতে বিশ্বস্ত কাউকে যোগ করুন।",
+    "ML detects danger and alerts automatically." to "ML বিপদ শনাক্ত করে স্বয়ংক্রিয়ভাবে সতর্ক করে।",
+    "Adjust how easily Auto SOS activates." to "Auto SOS কতটা সহজে সক্রিয় হবে তা সামঞ্জস্য করুন।",
+    "Filter and review all past SOS events." to "সব আগের SOS ঘটনা ফিল্টার ও পর্যালোচনা করুন।",
+    "App Lock" to "অ্যাপ লক",
+    "Secure with biometrics or PIN." to "বায়োমেট্রিক্স বা PIN দিয়ে সুরক্ষিত করুন।",
+    "You're All Set!" to "আপনি প্রস্তুত!",
+    "Stay safe. Replay this tour from Help anytime. 💖" to "সুরক্ষিত থাকুন। যেকোনো সময় Help থেকে এই টুর আবার দেখুন। 💖",
+    "Go to Help & Support" to "সাহায্য ও সমর্থনে যান"
 )
 
 /**

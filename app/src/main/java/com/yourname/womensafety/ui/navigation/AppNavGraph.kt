@@ -31,6 +31,16 @@ import com.yourname.womensafety.data.network.RetrofitClient
 import com.yourname.womensafety.ui.screens.*
 import com.yourname.womensafety.ui.screens.AppLockScreen
 import com.yourname.womensafety.utils.tr
+import com.yourname.womensafety.data.AppServiceLocator
+import com.yourname.womensafety.ui.tour.LocalTourEngine
+import com.yourname.womensafety.ui.tour.TourEngine
+import com.yourname.womensafety.ui.tour.TourOverlay
+import com.yourname.womensafety.ui.tour.rememberTourEngine
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import androidx.activity.compose.BackHandler
 
 @Composable
 fun AppNavGraph(
@@ -46,6 +56,42 @@ fun AppNavGraph(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val haptic = LocalHapticFeedback.current
+
+    // ── App Tour ─────────────────────────────────────────────────────────
+    val tourEngine = rememberTourEngine()
+    val isTourActive by tourEngine.isActive.collectAsState()
+    val tourScope = rememberCoroutineScope()
+    val appCache = remember { AppServiceLocator.appCache }
+
+    // Robust flow-based trigger: waits until the dashboard route is actually
+    // in the back stack, then checks DataStore once.  A try-catch ensures a
+    // DataStore failure never silently kills the coroutine.
+    LaunchedEffect(navController) {
+        // Wait for the first time dashboard appears in the back stack
+        navController.currentBackStackEntryFlow
+            .filter { it.destination.route == "dashboard" }
+            .first()
+
+        // Check DataStore — default false if any error
+        val alreadySeen = try {
+            appCache.getTourCompleted()
+        } catch (e: Exception) {
+            false
+        }
+
+        if (!alreadySeen) {
+            delay(2500L) // Wait for dashboard, user data, and UI to fully load and settle
+            // Bug Fix 1: Only start the tour if the user is still on the Dashboard.
+            // During the 2500ms delay the user may have navigated to another screen;
+            // starting the tour there would cause steps to execute on the wrong screen.
+            if (navController.currentDestination?.route == "dashboard") {
+                tourEngine.start()
+            }
+        }
+    }
+
+    // Block back gesture while tour is active
+    BackHandler(enabled = isTourActive) { /* swallow — tour controls its own dismissal */ }
 
     // Sticky session-expired flag from SessionManager
     val sessionExpired by SessionManager.sessionExpired.collectAsState()
@@ -153,6 +199,11 @@ fun AppNavGraph(
 
     val bottomBarScreens = listOf("dashboard", "sos_history", "contacts", "profile")
 
+    CompositionLocalProvider(LocalTourEngine provides tourEngine) {
+    // Bug Fix 2+3: Full-window Box so TourOverlay's BoxWithConstraints reports the
+    // true window height (not window-minus-nav-bar). This aligns the spotlight
+    // coordinate space with boundsInWindow() readings from each screen's widgets.
+    Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         containerColor = com.yourname.womensafety.ui.theme.BgDark,
         snackbarHost = {
@@ -401,6 +452,26 @@ fun AppNavGraph(
                 composable("pricing") { PricingScreen(navController) }
                 composable("premium_features") { PremiumFeaturesScreen(navController) }
             }
+
         }
     }
+
+        // ── Tour overlay — full-window topmost layer ──────────────────────────
+        // Placed here as a direct child of the full-window Box (sibling to Scaffold),
+        // NOT inside the Scaffold's bottom-padded content area.
+        // This ensures BoxWithConstraints inside TourOverlay captures the true window
+        // dimensions, fixing spotlight/tooltip misalignment across all device sizes.
+        if (isTourActive) {
+            TourOverlay(
+                engine = tourEngine,
+                navController = navController,
+                onTourCompleted = {
+                    tourScope.launch {
+                        appCache.setTourCompleted(true)
+                    }
+                }
+            )
+        }
+    } // end full-window Box
+    } // end CompositionLocalProvider
 }

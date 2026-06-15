@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavController
 import com.yourname.womensafety.R
 
@@ -43,6 +44,20 @@ fun AboutAppScreen(navController: NavController) {
             Color(0xFF120508)  // Deep red
         )
     )
+    val context = LocalContext.current
+    val appVersion = try {
+        val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+        val vName = pInfo.versionName ?: "1.0"
+        val vCode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            pInfo.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            pInfo.versionCode.toLong()
+        }
+        "$vName (Build $vCode)"
+    } catch (e: Exception) {
+        "1.0 (Build 1)"
+    }
 
     Box(
         modifier = Modifier.fillMaxSize().background(backgroundGradient)
@@ -163,8 +178,8 @@ fun AboutAppScreen(navController: NavController) {
             Spacer(Modifier.height(16.dp))
 
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                AboutInfoRow("Version".tr(), "1.1.0 (Build 42)")
-                AboutInfoRow("Release Date".tr(), "June 2026")
+                AboutInfoRow("Version".tr(), appVersion)
+                AboutInfoRow("Release Date".tr(), "June 15, 2026")
                 AboutInfoRow("Environment".tr(), "Production")
             }
 

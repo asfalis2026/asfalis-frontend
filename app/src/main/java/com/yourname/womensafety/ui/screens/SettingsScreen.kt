@@ -36,6 +36,9 @@ import androidx.navigation.NavController
 import com.yourname.womensafety.data.network.dto.UpdateSettingsRequest
 import com.yourname.womensafety.ui.viewmodels.SettingsViewModel
 import com.yourname.womensafety.utils.LocaleManager
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import com.yourname.womensafety.ui.tour.TourTargetRegistry
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -148,6 +151,9 @@ fun SettingsScreen(navController: NavController) {
             Box(
                 modifier = Modifier.fillMaxWidth()
                     .clip(RoundedCornerShape(20.dp))
+                    .onGloballyPositioned { coords ->
+                        TourTargetRegistry.register("tour_auto_sos_card", coords.boundsInWindow())
+                    }
                     .background(if (autoSosEnabled) Color(0xFFE25F71).copy(0.06f) else Color(0xFF1E1416).copy(0.85f))
                     .border(1.dp, autoSosBorder, RoundedCornerShape(20.dp))
                     .padding(20.dp)
@@ -190,6 +196,13 @@ fun SettingsScreen(navController: NavController) {
             Spacer(Modifier.height(16.dp))
 
             // ── SHAKE SENSITIVITY SECTION ────────────────────────────────────
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onGloballyPositioned { coords ->
+                        TourTargetRegistry.register("tour_sensitivity_card", coords.boundsInWindow())
+                    }
+            ) {
             SettingsSectionCard(
                 icon = Icons.Default.GraphicEq,
                 title = "Shake Sensitivity".tr(),
@@ -257,6 +270,7 @@ fun SettingsScreen(navController: NavController) {
                     )
                 }
             }
+            } // end tour_sensitivity_card Box
 
             Spacer(Modifier.height(16.dp))
 

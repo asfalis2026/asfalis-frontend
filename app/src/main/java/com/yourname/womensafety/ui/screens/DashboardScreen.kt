@@ -29,6 +29,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import com.yourname.womensafety.utils.tr
 import com.yourname.womensafety.utils.trNonComposable
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import com.yourname.womensafety.ui.tour.TourTargetRegistry
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -312,6 +315,9 @@ fun DashboardScreen(navController: NavController) {
                     modifier = Modifier
                         .size(220.dp)
                         .clip(CircleShape)
+                        .onGloballyPositioned { coords ->
+                            TourTargetRegistry.register("tour_protection_btn", coords.boundsInWindow())
+                        }
                         .background(
                             if (isProtectionOn) Brush.radialGradient(listOf(Color(0xFFE25F71).copy(0.4f), Color(0xFFE25F71).copy(0.1f)))
                             else Brush.radialGradient(listOf(Color.Transparent, Color.Transparent))
@@ -494,6 +500,9 @@ fun DashboardScreen(navController: NavController) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(86.dp)
+                    .onGloballyPositioned { coords ->
+                        TourTargetRegistry.register("tour_ble_card", coords.boundsInWindow())
+                    }
                     .clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         isScanningForDevice = true
@@ -591,6 +600,9 @@ fun DashboardScreen(navController: NavController) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(96.dp)
+                    .onGloballyPositioned { coords ->
+                        TourTargetRegistry.register("tour_sos_btn", coords.boundsInWindow())
+                    }
                     .clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         if (androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {

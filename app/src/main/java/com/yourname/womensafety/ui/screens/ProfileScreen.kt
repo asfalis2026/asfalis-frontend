@@ -34,6 +34,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.yourname.womensafety.ui.viewmodels.ProfileUiState
 import com.yourname.womensafety.ui.viewmodels.ProfileViewModel
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import com.yourname.womensafety.ui.tour.TourTargetRegistry
 
 @Composable
 fun ProfileScreen(navController: NavController) {
@@ -218,7 +221,7 @@ fun ProfileScreen(navController: NavController) {
 
             Spacer(Modifier.height(20.dp))
 
-            // ── Premium Upgrade Banner ───────────────────────────────────────
+            // ── Premium Upgrade Banner ─────────────────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -229,6 +232,9 @@ fun ProfileScreen(navController: NavController) {
                         )
                     )
                     .border(1.dp, Color(0xFFE25F71).copy(0.3f), RoundedCornerShape(20.dp))
+                    .onGloballyPositioned { coords ->
+                        TourTargetRegistry.register("tour_premium_banner", coords.boundsInRoot())
+                    }
                     .clickable { navController.navigate("pricing") }
                     .padding(16.dp)
             ) {

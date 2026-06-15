@@ -40,6 +40,9 @@ import com.yourname.womensafety.ui.components.SecureScreen
 import com.yourname.womensafety.ui.viewmodels.ContactsViewModel
 import com.yourname.womensafety.utils.tr
 import com.yourname.womensafety.utils.trNonComposable
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import com.yourname.womensafety.ui.tour.TourTargetRegistry
 
 // ─── Country dial-code support ───────────────────────────────────────────────
 
@@ -204,6 +207,9 @@ fun TrustedContactsScreen(navController: NavController) {
                         } else {
                             showAddDialog = true 
                         }
+                    },
+                    modifier = Modifier.onGloballyPositioned { coords ->
+                        TourTargetRegistry.register("tour_contacts_fab", coords.boundsInWindow())
                     },
                     containerColor = if (isLimitReached) Color.Gray else Color(0xFFE25F71),
                     contentColor = if (isLimitReached) Color.DarkGray else Color.White,

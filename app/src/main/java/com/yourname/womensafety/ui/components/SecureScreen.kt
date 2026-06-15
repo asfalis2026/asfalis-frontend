@@ -10,22 +10,8 @@ import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun SecureScreen(enabled: Boolean = true) {
-    val context = LocalContext.current
-    val activity = context.findActivity() ?: return
-
-    DisposableEffect(activity, enabled) {
-        if (enabled) {
-            activity.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        } else {
-            activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        }
-
-        onDispose {
-            if (enabled) {
-                activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-            }
-        }
-    }
+    // Disabled FLAG_SECURE window flag to strictly allow screenshots and
+    // screen recording across the entire app, per team lead's request.
 }
 
 private tailrec fun Context.findActivity(): Activity? {

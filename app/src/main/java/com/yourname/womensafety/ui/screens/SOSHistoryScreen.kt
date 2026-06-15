@@ -46,6 +46,9 @@ import java.util.Locale
 import java.util.TimeZone
 import com.yourname.womensafety.utils.tr
 import com.yourname.womensafety.utils.trNonComposable
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import com.yourname.womensafety.ui.tour.TourTargetRegistry
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -206,49 +209,61 @@ fun SOSHistoryScreen(navController: NavController) {
                     Text("Alert History".tr(), color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     Text("Your SOS timeline".tr(), color = Color.Gray, fontSize = 13.sp)
                 }
-                // Clear all button — only shown when there are items
-                if (uiState is SosHistoryUiState.Success &&
-                    (uiState as SosHistoryUiState.Success).items.isNotEmpty()
+                // Clear all button — always shown to keep header stable
+                IconButton(
+                    onClick = {
+                        if (uiState is SosHistoryUiState.Success && (uiState as SosHistoryUiState.Success).items.isNotEmpty()) {
+                            showClearDialog = true
+                        }
+                    },
+                    modifier = Modifier.size(40.dp).clip(CircleShape)
+                        .background(Color(0xFFE25F71).copy(if (uiState is SosHistoryUiState.Success && (uiState as SosHistoryUiState.Success).items.isNotEmpty()) 0.25f else 0.1f))
+                        .border(1.dp, Color(0xFFE25F71).copy(if (uiState is SosHistoryUiState.Success && (uiState as SosHistoryUiState.Success).items.isNotEmpty()) 0.3f else 0.1f), CircleShape)
                 ) {
-                    IconButton(
-                        onClick = { showClearDialog = true },
-                        modifier = Modifier.size(40.dp).clip(CircleShape)
-                            .background(Color(0xFFE25F71).copy(0.25f))
-                            .border(1.dp, Color(0xFFE25F71).copy(0.3f), CircleShape)
-                    ) {
-                        Icon(Icons.Default.DeleteSweep, null, tint = Color(0xFFE25F71), modifier = Modifier.size(20.dp))
-                    }
+                    Icon(
+                        Icons.Default.DeleteSweep,
+                        null,
+                        tint = Color(0xFFE25F71).copy(if (uiState is SosHistoryUiState.Success && (uiState as SosHistoryUiState.Success).items.isNotEmpty()) 1f else 0.5f),
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
 
             Spacer(Modifier.height(20.dp))
 
+            // ── Filter Chips ──────────────────────────────────────────
+            // Moved outside the state block so it is always present as a fixed header,
+            // ensuring the tour target is always available and the layout doesn't jump.
+            LazyRow(
+                modifier = Modifier.onGloballyPositioned { coords ->
+                    TourTargetRegistry.register("tour_history_filters", coords.boundsInWindow())
+                },
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(filters) { f ->
+                    val selected = selectedFilter == f
+                    Surface(
+                        onClick = { selectedFilter = f },
+                        color = if (selected) Color(0xFFE25F71) else Color.White.copy(0.06f),
+                        shape = RoundedCornerShape(20.dp),
+                        border = if (!selected) androidx.compose.foundation.BorderStroke(
+                            1.dp, Color.White.copy(0.1f)
+                        ) else null
+                    ) {
+                        Text(
+                            f.tr(), color = if (selected) Color.White else Color.Gray,
+                            fontSize = 13.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
             when (val state = uiState) {
                 is SosHistoryUiState.Success -> {
-                    // ── Filter Chips ──────────────────────────────────────────
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(filters) { f ->
-                            val selected = selectedFilter == f
-                            Surface(
-                                onClick = { selectedFilter = f },
-                                color = if (selected) Color(0xFFE25F71) else Color.White.copy(0.06f),
-                                shape = RoundedCornerShape(20.dp),
-                                border = if (!selected) androidx.compose.foundation.BorderStroke(
-                                    1.dp, Color.White.copy(0.1f)
-                                ) else null
-                            ) {
-                                Text(
-                                    f.tr(), color = if (selected) Color.White else Color.Gray,
-                                    fontSize = 13.sp,
-                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(12.dp))
-
                     val filtered = when (selectedFilter) {
                         "Sent"      -> state.items.filter { it.status == "sent" || it.status == "dispatched" }
                         "Cancelled" -> state.items.filter { it.status == "cancelled" }
